@@ -1,0 +1,300 @@
+-- ==================== SERVICES ====================
+local Players = game:GetService("Players")
+local VirtualUser = game:GetService("VirtualUser")
+local TeleportService = game:GetService("TeleportService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+-- ==================== PERMANENT ANTI-AFK ====================
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+end)
+
+-- ==================== LOAD ZAPORIUM UI LIBRARY ====================
+local Library
+local success, result = pcall(function()
+    return loadstring(game:HttpGet('https://raw.githubusercontent.com/cheyt2025-cyber/HAYS-AI/refs/heads/main/ZAPORIUM'))()
+end)
+if not (success and result) then
+    warn("Failed to load Zaporium UI Library")
+    return
+end
+Library = result
+
+-- ==================== CREATE WINDOW ====================
+local Window = Library.CreateWindow({
+    Name = "ZAPORIUM",
+    LoadingTitle = "Zaporium",
+    ConfigurationSaving = {Enabled = false},
+    AccentColor = Color3.fromRGB(0, 212, 255),
+    Logo = "rbxassetid://112586636995159",
+    Credit = "Created by ScriptZap",
+    EnableBooting = true
+})
+
+-- ==================== INFO TAB ====================
+local InfoTab = Window:CreateTab("Info")
+InfoTab:CreateLabel("Welcome to ZAPORIUM! FREEMIUM SCRIPT✨")
+InfoTab:CreateLabel("Brainrot Egg Farm Auto Farm script!")
+InfoTab:CreateButton({
+    Name = "📋 Join Discord Server",
+    Callback = function()
+        setclipboard("https://discord.gg/FCwb52g5")
+        Window:Notify("Discord link copied!", 4)
+    end
+})
+
+-- ==================== MAIN TAB ====================
+local MainTab = Window:CreateTab("Main")
+local AutoSpawnEnabled = false
+
+MainTab:CreateToggle({
+    Name = "Auto Spawn Egg",
+    Default = false,
+    Callback = function(state)
+        AutoSpawnEnabled = state
+        Window:Notify(state and "Auto Spawn ON - Pauses on selected rarities" or "Auto Spawn OFF", 5)
+    end
+})
+
+MainTab:CreateLabel("Toggle on the Rarity you want to skip!")
+
+-- PERFECT ORDER: Basic → Rare → Epic → Legendary → Mythic → Spooky
+local SkipOrder = {"Basic", "Rare", "Epic", "Legendary", "Mythic", "Secret", "Divine", "Godly", "Admin", "Spooky", "Exclusive"}
+local SkipRarities = {}
+for _, rarity in ipairs(SkipOrder) do
+    SkipRarities[rarity] = false
+end
+
+for _, rarity in ipairs(SkipOrder) do
+    MainTab:CreateToggle({
+        Name = "Skip Pause on " .. rarity,
+        Default = false,
+        Callback = function(state)
+            SkipRarities[rarity] = state
+        end
+    })
+end
+
+-- ==================== SHOP TAB (ALL RARITIES IN ORDER) ====================
+local ShopTab = Window:CreateTab("Shop")
+local AutoBuyEnabled = false
+local RarityOrder = {"Basic", "Rare", "Epic", "Legendary", "Mythic", "Secret", "Divine", "Godly", "Admin", "Spooky", "Exclusive"}
+local BuyRarities = {}
+for _, r in ipairs(RarityOrder) do
+    BuyRarities[r] = (r == "Mythic" or r == "Secret" or r == "Divine" or r == "Godly" or r == "Exclusive")
+end
+
+ShopTab:CreateToggle({
+    Name = "Enable Auto-Buy Selected Rarities",
+    Default = false,
+    Callback = function(state)
+        AutoBuyEnabled = state
+        Window:Notify(state and "Auto-Buy ON" or "Auto-Buy OFF", 5)
+    end
+})
+
+ShopTab:CreateLabel("Select rarities to instantly buy:")
+
+for _, rarity in ipairs(RarityOrder) do
+    ShopTab:CreateToggle({
+        Name = "Buy " .. rarity,
+        Default = BuyRarities[rarity],
+        Callback = function(state)
+            BuyRarities[rarity] = state
+        end
+    })
+end
+
+-- ==================== MISC TAB ====================
+local MiscTab = Window:CreateTab("Misc")
+MiscTab:CreateSlider({
+    Name = "WalkSpeed",
+    Min = 16,
+    Max = 300,
+    Default = 16,
+    Callback = function(value)
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = value
+        end
+        LocalPlayer.CharacterAdded:Connect(function(char)
+            task.wait(0.5)
+            if char:FindFirstChild("Humanoid") then char.Humanoid.WalkSpeed = value end
+        end)
+    end
+})
+
+MiscTab:CreateButton({
+    Name = "Rejoin Server",
+    Callback = function()
+        Window:Notify("Rejoining...", 3)
+        task.wait(0.3)
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end
+})
+
+Window:Notify("ZAPORIUM v13 - Perfect Order Final!", 7)
+
+-- ==================== REMOTES ====================
+local Clicked = ReplicatedStorage
+:WaitForChild("Packages")
+:WaitForChild("Knit")
+:WaitForChild("Services")
+:WaitForChild("EggService")
+:WaitForChild("RF")
+:WaitForChild("Clicked")
+
+local BuyEgg = ReplicatedStorage
+:WaitForChild("Packages")
+:WaitForChild("Knit")
+:WaitForChild("Services")
+:WaitForChild("EggService")
+:WaitForChild("RF")
+:WaitForChild("BuyEgg")
+
+-- ==================== RARITY SYSTEM ====================
+local RarityValues = {
+    Basic = 1, Rare = 2, Epic = 3, Legendary = 4,
+    Mythic = 5, Secret = 6, Divine = 7, Godly = 8,
+    Admin = 9, Spooky = 10, Exclusive = 11
+}
+
+local function GetRarityValue(text)
+    if not text then return 0 end
+    local clean = text:gsub("%s+", ""):upper()
+    for name, val in pairs(RarityValues) do
+        if clean:find(name:upper()) then return val end
+    end
+    return 0
+end
+
+local function GetRarityName(val)
+    for name, v in pairs(RarityValues) do if v == val then return name end end
+    return "Unknown"
+end
+
+local function GetEggRarityLabel(egg)
+    local success, label = pcall(function()
+        local hb = egg:FindFirstChild("Hitbox", true)
+        if hb and hb:FindFirstChild("TopAttachment") then
+            local f = hb.TopAttachment.EggPurchase.Frame.Rarity
+            return f:FindFirstChildWhichIsA("TextLabel") or f
+        end
+    end)
+    if success and label and label:IsA("TextLabel") then
+        return label.Text
+    end
+    return nil
+end
+
+-- ==================== AUTO SPAWN + PAUSE ON SELECTED RARITIES ====================
+local ShouldPauseSpawn = false
+
+task.spawn(function()
+    while task.wait(0.04) do
+        if AutoSpawnEnabled and not ShouldPauseSpawn then
+            pcall(function()
+                Clicked:InvokeServer()
+            end)
+        end
+    end
+end)
+
+task.spawn(function()
+    local player = LocalPlayer
+    repeat task.wait() until player.Character
+
+    local function CheckPlots()
+        local bestFolder = nil
+        local bestDist = math.huge
+        local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+
+        for i = 1, 8 do
+            local plot = workspace.GameObjects.Plots:FindFirstChild("Plot" .. i)
+            if plot and plot:FindFirstChild("Logic") then
+                local temp = plot.Logic:FindFirstChild("TemporaryEggs")
+                if temp and #temp:GetChildren() > 0 then
+                    local pos = plot.Logic.PrimaryPart and plot.Logic.PrimaryPart.Position or plot.Logic:GetPivot().Position
+                    local dist = (hrp.Position - pos).Magnitude
+                    if dist < bestDist then
+                        bestDist = dist
+                        bestFolder = temp
+                    end
+                end
+            end
+        end
+
+        if bestFolder then
+            local highest = 0
+            for _, egg in pairs(bestFolder:GetChildren()) do
+                local text = GetEggRarityLabel(egg)
+                local val = GetRarityValue(text)
+                if val > highest then highest = val end
+            end
+
+            local rarityName = GetRarityName(highest)
+            local skipThis = SkipRarities[rarityName] or false
+
+            -- Pause if the rarity exists and you did NOT toggle skip
+            local shouldPause = (highest > 0) and not skipThis
+
+            if shouldPause ~= ShouldPauseSpawn then
+                ShouldPauseSpawn = shouldPause
+                Window:Notify(shouldPause and "PAUSED - High Rarity Detected: " .. rarityName or "Resumed Spawning", 4)
+            end
+        end
+    end
+
+    while task.wait(0.2) do
+        if AutoSpawnEnabled then
+            pcall(CheckPlots)
+        end
+    end
+end)
+
+-- ==================== AUTO BUY ====================
+task.spawn(function()
+    local player = LocalPlayer
+    repeat task.wait() until player.Character
+
+    local function ConnectPlots()
+        for i = 1, 8 do
+            local plot = workspace.GameObjects.Plots:FindFirstChild("Plot" .. i)
+            if plot and plot:FindFirstChild("Logic") then
+                local temp = plot.Logic:FindFirstChild("TemporaryEggs")
+                if temp and not temp:GetAttribute("AutoBuyConnected") then
+                    temp:SetAttribute("AutoBuyConnected", true)
+
+                    temp.ChildAdded:Connect(function(egg)
+                        if not AutoBuyEnabled then return end
+                        task.wait(0.15)
+                        if not egg.Parent then return end
+
+                        local text = GetEggRarityLabel(egg)
+                        if text then
+                            local val = GetRarityValue(text)
+                            local name = GetRarityName(val)
+                            if BuyRarities[name] then
+                                print("🤑 AUTO-BOUGHT " .. text)
+                                pcall(function()
+                                    BuyEgg:InvokeServer(egg.Name)
+                                end)
+                            end
+                        end
+                    end)
+                end
+            end
+        end
+    end
+
+    ConnectPlots()
+    player.CharacterAdded:Connect(function()
+        task.wait(2)
+        ConnectPlots()
+    end)
+end)
+
+print("ZAPORIUM v10.067 LOADED!")
