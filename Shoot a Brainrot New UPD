@@ -1,0 +1,403 @@
+-- =============================================
+-- ZAPORIUM • SHOOT A BRAINROT • v10.70 + BEST ESP (FULLY FIXED)
+-- ONLY Legendary / Secret / Brainrot God / Mythical
+-- =============================================
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace         = game:GetService("Workspace")
+local TeleportService   = game:GetService("TeleportService")
+local HttpService       = game:GetService("HttpService")
+local VirtualUser       = game:GetService("VirtualUser")
+
+local player      = Players.LocalPlayer
+local LocalPlayer = player
+
+local Stampede    = Workspace:WaitForChild("Stampede")
+local NPCsFolder  = Stampede:WaitForChild("NPCs")
+local ByteNet     = ReplicatedStorage:WaitForChild("ByteNetReliable")
+local gunsFolder  = ReplicatedStorage:WaitForChild("Guns")
+
+-- ================== CONFIG ==================
+local ATTACK_BUFFER = buffer.fromstring("\016\nZ\142\194b>s\194\209f\234B\127\156\019i)\151eC23\219A\030\186\019B\218\015I\192\222q\133>\218\015I@\001\000\001\0001\001\002")
+local SCAN_RADIUS = 100
+local FIRE_RATE = 0.2
+local NPC_COOLDOWN = 0.08
+
+local autoAttackEnabled = false
+local attackThread = nil
+local lastFire = {}
+local teleportEnabled = true
+local focusBrainrot = false
+local currentBrainrot = nil
+local walkSpeed = 16
+
+local allowedRarities = { ["Legendary"] = true, ["Secret"] = true, ["Brainrot God"] = true }
+
+local npcRarityData = {
+    ["Il Cacto Hipopotamo"] = "Legendary", ["Frigo Camelo"] = "Legendary", ["Svinina Bombardino"] = "Legendary",
+    ["Bananita Dolfinita"] = "Legendary", ["Udin Din Din Dun"] = "Legendary", ["Ballerina Cappuccina"] = "Legendary",
+    ["Karkerkar Kurkur"] = "Secret", ["Job Job Job Sahur"] = "Secret", ["Gattatino Nyanino"] = "Secret",
+    ["Matteo"] = "Secret", ["Fragola La La La"] = "Secret", ["Chicleteira Bicicleteira"] = "Secret",
+    ["Tralalero Tralala"] = "Secret", ["Six Seven"] = "Secret", ["Pot Hotspot"] = "Secret",
+    ["Dragon Cannelloni"] = "Secret", ["Los SixSeven"] = "Secret", ["Los Tralaletos"] = "Secret",
+    ["Los Matteos"] = "Secret", ["Perrito Burrito"] = "Secret", ["Spaghetti Tualetti"] = "Secret",
+    ["Secret Lucky Block"] = "Secret",
+}
+
+local gunNames = {
+    "Blade Gun","Chrome Rifle","Comet Blaster","DJ Gun","Dragon Soul","Drum Gun",
+    "Firework Launcher","Minigun","Pistol","Pumpkin Launcher","Purple Flamethrower",
+    "Sentinel","Shotgun","Sniper","Techno Blaster","Time Machine","Cash Gun","Plazma Gun"
+}
+
+-- ================== CORE FUNCTIONS ==================
+local function notify(msg,time) if Window and Window.Notify then Window:Notify(msg,time or 5) end end
+
+local function getAllGuns()
+    local guns = {}
+    local char = LocalPlayer.Character
+    if char then
+        local equipped = char:FindFirstChildOfClass("Tool")
+        if equipped and equipped:FindFirstChild("Handle") then table.insert(guns,equipped) end
+        for _,v in LocalPlayer.Backpack:GetChildren() do
+            if v:IsA("Tool") and v:FindFirstChild("Handle") then table.insert(guns,v) end
+        end
+    end
+    return guns
+end
+
+local function attackNPC(npc,guns)
+    if focusBrainrot and npc ~= currentBrainrot then return end
+    local hitbox = npc:FindFirstChild("Hitbox")
+    local root = npc:FindFirstChild("HumanoidRootPart") or hitbox
+    if not (hitbox and root) then return end
+    local rarity = npcRarityData[npc.Name]
+    if not rarity or not allowedRarities[rarity] then return end
+
+    local key = npc.Name.."_"..npc:GetDebugId()
+    if lastFire[key] and tick()-lastFire[key] < NPC_COOLDOWN then return end
+    lastFire[key] = tick()
+
+    for _,gun in guns do
+        pcall(function() ByteNet:FireServer(ATTACK_BUFFER,{hitbox,gun}) end)
+    end
+end
+
+local function startAutoAttack()
+    if attackThread then return end
+    attackThread = task.spawn(function()
+        while autoAttackEnabled do
+            local char = LocalPlayer.Character
+            if not char or not char:FindFirstChild("HumanoidRootPart") then task.wait(0.5) continue end
+            local guns = getAllGuns()
+            if #guns == 0 then task.wait(0.3) continue end
+
+            for _,npc in NPCsFolder:GetChildren() do
+                if npc:IsA("Model") then
+                    local hitbox = npc:FindFirstChild("Hitbox")
+                    local root = npc:FindFirstChild("HumanoidRootPart") or hitbox
+                    if hitbox and root and (char.HumanoidRootPart.Position-root.Position).Magnitude <= SCAN_RADIUS then
+                        attackNPC(npc,guns)
+                    end
+                end
+            end
+            task.wait(FIRE_RATE)
+        end
+        attackThread = nil
+    end)
+end
+
+local function stopAutoAttack() autoAttackEnabled = false if attackThread then task.cancel(attackThread) attackThread=nil end end
+
+local function safeTeleport(pos)
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        char.HumanoidRootPart.CFrame = CFrame.new(pos + Vector3.new(0,8,-5))
+    end
+end
+
+local function focusOnBrainrot(npc)
+    local root = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChild("Hitbox")
+    if not root then return end
+    focusBrainrot = true
+    currentBrainrot = npc
+    notify("BRAINROT GOD SPAWNED! Teleporting...",5)
+    if teleportEnabled then safeTeleport(root.Position) end
+
+    task.spawn(function()
+        while npc and npc.Parent and focusBrainrot do
+            local guns = getAllGuns()
+            if #guns>0 then attackNPC(npc,guns) end
+            task.wait(FIRE_RATE)
+        end
+        focusBrainrot = false currentBrainrot = nil
+        notify("Brainrot God Killed! Back to farming",5)
+    end)
+end
+
+local function isBrainrotGod(name) return npcRarityData[name]=="Brainrot God" end
+
+-- ================== UI ==================
+local Library = loadstring(game:HttpGet('https://raw.githubusercontent.com/cheyt2025-cyber/HAYS-AI/refs/heads/main/ZAPORIUM'))()
+local Window = Library.CreateWindow({Name="ZAPORIUM",LoadingTitle="Zaporium Loading...",AccentColor=Color3.fromRGB(0,212,255),Logo="rbxassetid://112586636995159",Credit="Created by ScriptZap",EnableBooting=true})
+
+notify("ZAPORIUM v10.70 + BEST ESP Loaded!",8)
+
+local InfoTab = Window:CreateTab("Info")
+local MainTab = Window:CreateTab("Main")
+local GunsTab = Window:CreateTab("Guns")
+local ESPTab  = Window:CreateTab("ESP")
+local MiscTab = Window:CreateTab("Misc")
+
+-- ================== INFO TAB ==================
+InfoTab:CreateLabel("Shoot a Brainrot • v10.70")
+InfoTab:CreateLabel("ONLY Legendary, Secret, Brainrot God")
+InfoTab:CreateLabel("NEW: Perrito Burrito, Spaghetti Tualetti, Secret Lucky Block")
+InfoTab:CreateLabel("Thankyou for Using my script Hope You enjoy using it! Send Feedback on My DISCORD")
+InfoTab:CreateLabel("Plazma Gun Auto-Added")
+InfoTab:CreateButton({Name="Join Discord",Callback=function() setclipboard("https://discord.gg/bGNJ5cNh") notify("Discord Link Copied!",5) end})
+
+-- ================== MAIN TAB ==================
+MainTab:CreateLabel("NOTE: NEED GOOD BOUGHT GUNS")
+MainTab:CreateToggle({Name="Auto Farm (Legendary/Secret/Brainrot God)",Default=false,Callback=function(v)
+        autoAttackEnabled = v
+        if v then
+            if #getAllGuns()==0 then notify("Equip a gun first!",5) autoAttackEnabled=false return end
+            startAutoAttack() notify("Auto Farm ON",4)
+    else stopAutoAttack() notify("Auto Farm OFF",4) end
+end})
+MainTab:CreateSlider({Name="Scan Range",Min=25,Max=200,Default=100,Callback=function(v) SCAN_RADIUS=v end})
+MainTab:CreateSlider({Name="Fire Rate",Min=1,Max=10,Default=2,Callback=function(v) FIRE_RATE=v/10 end})
+MainTab:CreateLabel("NOTE: Just turn On this, Enjoy AFK Farming")
+MainTab:CreateToggle({Name="Teleport to Brainrot God!",Default=true,Callback=function(v) teleportEnabled=v end})
+
+-- ================== GUNS TAB ==================
+GunsTab:CreateLabel("GET ALL GUNS FIRST")
+GunsTab:CreateButton({Name="GET ALL GUNS (Instant)",Callback=function()
+        local c=0
+        for _,n in ipairs(gunNames) do
+            local g = gunsFolder:FindFirstChild(n)
+            if g and g:IsA("Tool") then g.Parent=player.Backpack c=c+1 end
+        end
+        notify(c.." Guns Added!",6)
+end})
+
+GunsTab:CreateLabel("SPECIAL")
+GunsTab:CreateButton({Name="Plazma Gun (BEST)",Callback=function() local g=gunsFolder:FindFirstChild("Plazma Gun") if g then g.Parent=player.Backpack notify("Plazma Gun Added!",5) end end})
+GunsTab:CreateButton({Name="Cash Gun",Callback=function() local g=gunsFolder:FindFirstChild("Cash Gun") if g then g.Parent=player.Backpack notify("Cash Gun Added!",5) end end})
+
+GunsTab:CreateLabel("OTHERS")
+for _,n in ipairs(gunNames) do
+    if n~="Plazma Gun" and n~="Cash Gun" then
+        GunsTab:CreateButton({Name=n,Callback=function()
+                local g=gunsFolder:FindFirstChild(n)
+                if g then g.Parent=player.Backpack notify(n.." Added!",3) end
+        end})
+    end
+end
+
+-- ================== ESP SYSTEM (TOGGLEABLE + MYTHICAL RED GLOW) ==================
+local ESP_ENABLED = false
+
+local HIGH_TIER = {["Legendary"]=true,["Mythic"]=true,["Mythical"]=true,["Brainrot God"]=true,["Secret"]=true}
+local BASE_COLORS = {
+    Legendary = Color3.fromRGB(255,215,0),
+    Mythic    = Color3.fromRGB(255,0,0),
+    Mythical  = Color3.fromRGB(255,0,0),
+    Secret    = Color3.fromRGB(255,255,255),
+    ["Brainrot God"] = Color3.fromRGB(255,0,255)
+}
+
+local function rainbow(t) return Color3.fromHSV((t%5)/5,1,1) end
+
+local function getRarity(npc)
+    local overhead = npc:FindFirstChild("StampedeOverhead")
+    if not overhead then return nil end
+    local charName = overhead:FindFirstChild("CharacterName")
+    if not charName then return nil end
+
+    for _,v in charName:GetChildren() do
+        if HIGH_TIER[v.Name] then return v.Name end
+    end
+    for _,v in charName:GetChildren() do
+        if v:IsA("StringValue") and HIGH_TIER[v.Value] then return v.Value end
+    end
+    return nil
+end
+
+local function createESP(npc)
+    if npc:FindFirstChild("HighTierESP") then npc.HighTierESP:Destroy() end
+    local rarity = getRarity(npc)
+    if not rarity then return end
+
+    local folder = Instance.new("Folder", npc)
+    folder.Name = "HighTierESP"
+
+    local head = npc:FindFirstChild("Head") or npc.PrimaryPart or npc:FindFirstChildWhichIsA("BasePart")
+    if not head then return end
+
+    local bg = Instance.new("BillboardGui", folder)
+    bg.Name = "ESPBillboard"
+    bg.Adornee = head
+    bg.Size = UDim2.new(18,0,6,0)
+    bg.StudsOffset = Vector3.new(0,6,0)
+    bg.AlwaysOnTop = true
+    bg.LightInfluence = 0
+    bg.MaxDistance = 100000
+    bg.Enabled = ESP_ENABLED
+
+    local lbl = Instance.new("TextLabel", bg)
+    lbl.Size = UDim2.new(1,0,1,0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = rarity:upper()
+    lbl.TextScaled = true
+    lbl.Font = Enum.Font.GothamBlack
+    lbl.TextColor3 = Color3.new(1,1,1)
+    lbl.TextStrokeTransparency = 0
+    lbl.TextStrokeColor3 = Color3.new(0,0,0)
+
+    local stroke = Instance.new("UIStroke", lbl)
+    stroke.Thickness = 9
+
+    local hl = Instance.new("Highlight", folder)
+    hl.Name = "ESPHighlight"
+    hl.FillTransparency = 1
+    hl.OutlineTransparency = 1
+    hl.OutlineColor = BASE_COLORS[rarity] or Color3.new(1,1,1)
+
+    if rarity == "Brainrot God" then
+        task.spawn(function()
+            local t = 0
+            while npc.Parent and folder.Parent do
+                if not ESP_ENABLED then task.wait(0.1) continue end
+                local col = rainbow(t)
+                stroke.Color = col
+                hl.OutlineColor = col
+                stroke.Thickness = 9 + math.sin(t*3)*3
+                t += 0.05
+                task.wait(0.05)
+            end
+        end)
+    elseif rarity == "Secret" then
+        task.spawn(function()
+            local t = 0
+            while npc.Parent and folder.Parent do
+                if not ESP_ENABLED then task.wait(0.1) continue end
+                local p = (math.sin(t*2)+1)/2
+                local col = BASE_COLORS.Secret:Lerp(Color3.new(0,0,0),p)
+                stroke.Color = col
+                hl.OutlineColor = col
+                t += 0.05
+                task.wait(0.05)
+            end
+        end)
+    else
+        stroke.Color = BASE_COLORS[rarity]
+        hl.OutlineColor = BASE_COLORS[rarity]
+    end
+end
+
+local function updateESPToggle(state)
+    ESP_ENABLED = state
+    for _,npc in NPCsFolder:GetChildren() do
+        if npc:IsA("Model") then
+            local esp = npc:FindFirstChild("HighTierESP")
+            if esp then
+                local bg = esp:FindFirstChild("ESPBillboard")
+                local hl = esp:FindFirstChild("ESPHighlight")
+                if bg then bg.Enabled = state end
+                if hl then hl.OutlineTransparency = state and 0 or 1 end
+            end
+        end
+    end
+end
+
+NPCsFolder.ChildAdded:Connect(function(npc)
+    if npc:IsA("Model") then
+        task.wait(0.5)
+        createESP(npc)
+    end
+end)
+
+for _,npc in NPCsFolder:GetChildren() do
+    if npc:IsA("Model") then
+        createESP(npc)
+        npc.DescendantAdded:Connect(function()
+            task.wait(0.3)
+            createESP(npc)
+        end)
+    end
+end
+
+ESPTab:CreateLabel("Will show ESP for Legendary / Mythical / Secret / Brainrot God")
+ESPTab:CreateToggle({
+    Name = "Enable High-Tier ESP",
+    Default = false,
+    Callback = function(state)
+        updateESPToggle(state)
+        notify(state and "ESP Enabled" or "ESP Disabled", 3)
+    end
+})
+
+-- ================== MISC TAB ==================
+MiscTab:CreateButton({Name="Hop Server",Callback=function()
+        notify("Hopping server...",4)
+        local s = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
+        local a = {}
+        for _,v in s.data do
+            if v.playing < v.maxPlayers and v.id ~= game.JobId then table.insert(a,v.id) end
+        end
+        if #a > 0 then
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, a[math.random(1,#a)], LocalPlayer)
+        else
+            notify("No servers found!",5)
+        end
+end})
+
+MiscTab:CreateSlider({Name="WalkSpeed",Min=16,Max=300,Default=16,Callback=function(v)
+        walkSpeed = v
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = v
+        end
+end})
+
+MiscTab:CreateButton({Name="Rejoin Server",Callback=function()
+        notify("Rejoining...",3)
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+end})
+
+-- ================== EVENTS ==================
+NPCsFolder.ChildAdded:Connect(function(npc)
+    task.wait(0.3)
+    if npc:IsA("Model") and isBrainrotGod(npc.Name) and not focusBrainrot then
+        focusOnBrainrot(npc)
+    end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(3)
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid.WalkSpeed = walkSpeed
+    end
+    if autoAttackEnabled then startAutoAttack() end
+end)
+
+task.spawn(function()
+    LocalPlayer.CharacterAdded:Connect(function(c)
+        task.wait(0.5)
+        if c:FindFirstChild("Humanoid") then c.Humanoid.WalkSpeed = walkSpeed end
+    end)
+end)
+
+task.spawn(function()
+    task.wait(2)
+    local p = gunsFolder:FindFirstChild("Plazma Gun")
+    if p then p.Parent = player.Backpack notify("Plazma Gun Auto-Added!",6) end
+end)
+
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+end)
