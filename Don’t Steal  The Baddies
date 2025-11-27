@@ -1,0 +1,290 @@
+local Players = game:GetService("Players")
+local VirtualUser = game:GetService("VirtualUser")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- Permanent Anti-AFK
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+end)
+
+-- Load Zaporium UI Library
+local Library = loadstring(game:HttpGet('https://raw.githubusercontent.com/cheyt2025-cyber/HAYS-AI/refs/heads/main/ZAPORIUM'))()
+
+-- Main Window
+local Window = Library.CreateWindow({
+    Name = "ZAPORIUM",
+    LoadingTitle = "Zaporium",
+    ConfigurationSaving = {Enabled = false},
+    AccentColor = Color3.fromRGB(0, 212, 255),
+    Logo = "rbxassetid://112586636995159",
+    Credit = "Created by ScriptZap",
+    EnableBooting = true
+})
+
+-- Tabs
+local InfoTab = Window:CreateTab("Info")
+local FarmTab = Window:CreateTab("Farm")
+local MiscTab = Window:CreateTab("Misc")
+
+-- ==================== INFO TAB ====================
+InfoTab:CreateLabel("Welcome to ZAPORIUM!")
+InfoTab:CreateLabel("Thank you so much for using my script!")
+InfoTab:CreateLabel("Made with love • Fassion")
+InfoTab:CreateLabel("I hope you enjoy every second using it!")
+InfoTab:CreateLabel("Your support keeps me going!")
+InfoTab:CreateLabel("")
+InfoTab:CreateLabel("~ ScriptZap")
+InfoTab:CreateLabel("ZAPORIUM • Simple, Clean, Powerful")
+
+InfoTab:CreateButton({
+    Name = "Join Discord Server",
+    Callback = function()
+        setclipboard("https://discord.gg/FCwb52g5")
+        Window:Notify("Discord link copied to clipboard!", 4)
+    end
+})
+
+-- ==================== FARM TAB ====================
+local autoStealEnabled = false
+local stealConnection = nil
+local autoCollectEnabled = false
+local collectConnection = nil
+local rememberedPlot = nil  -- Will store your plot permanently once detected
+
+local TARGET_RARITIES = {Legendary = true, Mythic = true, Divine = true, Secret = true}
+local SAFE_ZONE = CFrame.new(16.96, 4.00, 5.35)
+
+-- === AUTO STEAL (unchanged, works perfectly) ===
+local function getRarity(npc)
+    local overhead = npc:FindFirstChild("OverheadAttachment") or (npc:FindFirstChild("Head") and npc.Head:FindFirstChild("OverheadAttachment"))
+    if not overhead then return nil end
+    local rarityLabel = overhead:FindFirstChild("Rarity", true)
+    if rarityLabel and rarityLabel:IsA("TextLabel") then
+        local text = rarityLabel.Text
+        for rarity in pairs(TARGET_RARITIES) do
+            if text:find(rarity) then
+                return rarity
+            end
+        end
+    end
+    return nil
+end
+
+local function triggerPrompt(prompt)
+    if not prompt or not prompt:IsA("ProximityPrompt") then return end
+    prompt.HoldDuration = 0
+    prompt.RequiresLineOfSight = false
+    fireproximityprompt(prompt)
+end
+
+local function stealNPC(npc)
+    if not autoStealEnabled then return end
+    local rarity = getRarity(npc)
+    if rarity and TARGET_RARITIES[rarity] then
+        Window:Notify("Stealing " .. rarity .. "!", 3)
+
+        local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+        local hrp = character:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+
+        local root = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChild("PrimaryPart") or npc:FindFirstChildWhichIsA("BasePart")
+        if root then
+            hrp.CFrame = root.CFrame + Vector3.new(0, 5, 0)
+            task.wait(0.3)
+        end
+
+        local pickup = npc:FindFirstChild("Prompts") and npc.Prompts:FindFirstChild("Pickup")
+        or npc:FindFirstChildWhichIsA("ProximityPrompt")
+        if pickup then
+            triggerPrompt(pickup)
+            task.wait(0.5)
+        end
+
+        hrp.CFrame = SAFE_ZONE
+    end
+end
+
+local function toggleAutoSteal(state)
+    autoStealEnabled = state
+    if state then
+        Window:Notify("Auto Steal ENABLED (Legendary+)", 4)
+
+        local map = workspace:FindFirstChild("Map")
+        local zones = map and map:FindFirstChild("Zones")
+        local field = zones and zones:FindFirstChild("Field")
+        local folder = field and field:FindFirstChild("NPC")
+
+        if folder then
+            stealConnection = folder.ChildAdded:Connect(function(npc)
+                task.wait(1.5)
+                task.spawn(stealNPC, npc)
+            end)
+
+            for _, npc in ipairs(folder:GetChildren()) do
+                task.spawn(stealNPC, npc)
+            end
+        end
+    else
+        Window:Notify("Auto Steal DISABLED", 4)
+        if stealConnection then
+            stealConnection:Disconnect()
+            stealConnection = nil
+        end
+    end
+end
+
+-- === AUTO COLLECT (FULLY FIXED) ===
+local function detectMyPlot()
+    local character = LocalPlayer.Character
+    if not character then return nil end
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+
+    local rayOrigin = hrp.Position + Vector3.new(0, 50, 0)
+    local rayDirection = Vector3.new(0, -100, 0)
+
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    raycastParams.FilterDescendantsInstances = {character}
+
+    local result = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+    if result then
+        local current = result.Instance
+        while current and current ~= workspace do
+            if current:IsA("Model") and current.Name:match("^Plot%d+$") and current.Parent.Name == "Plots" then
+                return current
+            end
+            current = current.Parent
+        end
+    end
+    return nil
+end
+
+local function startCollecting()
+    if not rememberedPlot or not rememberedPlot.Parent then
+        rememberedPlot = nil
+        autoCollectEnabled = false
+        Window:Notify("Your plot was destroyed! Auto Collect stopped.", 6)
+        return
+    end
+
+    local slotsFolder = rememberedPlot:FindFirstChild("Slots")
+    if not slotsFolder then return end
+
+    for _, part in slotsFolder:GetDescendants() do
+        if part:IsA("BasePart") and part:FindFirstChild("TouchInterest") then
+            firetouchinterest(part, LocalPlayer.Character.HumanoidRootPart, 0)
+            task.wait()
+            firetouchinterest(part, LocalPlayer.Character.HumanoidRootPart, 1)
+        end
+    end
+end
+
+local function enableAutoCollect()
+    -- First time: detect plot
+    if not rememberedPlot then
+        Window:Notify("Auto Collect: Detecting your plot... Stand on it!", 6)
+        while not rememberedPlot do
+            rememberedPlot = detectMyPlot()
+            if rememberedPlot then
+                Window:Notify("Plot locked: " .. rememberedPlot.Name .. " | Auto Collect READY!", 6)
+                break
+            end
+            task.wait(1)
+        end
+    else
+        Window:Notify("Auto Collect ENABLED (Using saved plot: " .. rememberedPlot.Name .. ")", 5)
+    end
+
+    -- Start collecting loop
+    if collectConnection then collectConnection:Disconnect() end
+    collectConnection = RunService.Heartbeat:Connect(startCollecting)
+end
+
+local function disableAutoCollect()
+    if collectConnection then
+        collectConnection:Disconnect()
+        collectConnection = nil
+    end
+    Window:Notify("Auto Collect DISABLED", 4)
+end
+
+-- Auto Collect Toggle
+FarmTab:CreateToggle({
+    Name = "Auto Collect",
+    CurrentValue = false,
+    Callback = function(value)
+        autoCollectEnabled = value
+        if value then
+            enableAutoCollect()
+        else
+            disableAutoCollect()
+            -- We do NOT reset rememberedPlot anymore → it stays saved!
+        end
+    end
+})
+
+-- Auto Steal Toggle
+FarmTab:CreateToggle({
+    Name = "Auto Steal",
+    CurrentValue = false,
+    Callback = function(value)
+        toggleAutoSteal(value)
+    end
+})
+FarmTab:CreateLabel("Turn On to auto steal Legendary, Mythic, Divine, Secret")
+
+-- ==================== MISC TAB ====================
+MiscTab:CreateButton({
+    Name = "Hop Server",
+    Callback = function()
+        Window:Notify("Hopping to a new server...", 3)
+        local servers = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
+        local available = {}
+        for _, v in pairs(servers.data) do
+            if v.playing < v.maxPlayers and v.id ~= game.JobId then
+                table.insert(available, v.id)
+            end
+        end
+        if #available > 0 then
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, available[math.random(1, #available)], LocalPlayer)
+        else
+            Window:Notify("No available servers found!", 4)
+        end
+    end
+})
+
+MiscTab:CreateSlider({
+    Name = "WalkSpeed",
+    Min = 16,
+    Max = 300,
+    Default = 16,
+    Callback = function(value)
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = value
+        end
+        LocalPlayer.CharacterAdded:Connect(function(char)
+            task.wait(0.5)
+            if char:FindFirstChild("Humanoid") then
+                char.Humanoid.WalkSpeed = value
+            end
+        end)
+    end
+})
+
+MiscTab:CreateButton({
+    Name = "Rejoin Server",
+    Callback = function()
+        Window:Notify("Rejoining server...", 3)
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end
+})
+
+-- Success
+Window:Notify("ZAPORIUM Loaded Successfully!", 7)
