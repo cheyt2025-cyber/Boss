@@ -1,0 +1,223 @@
+local Players = game:GetService("Players")
+local VirtualUser = game:GetService("VirtualUser")
+local TeleportService = game:GetService("TeleportService")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+-- Permanent Anti-AFK (Always ON)
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+end)
+
+-- Load Zaporium UI Library
+local Library = loadstring(game:HttpGet('https://raw.githubusercontent.com/cheyt2025-cyber/HAYS-AI/refs/heads/main/ZAPORIUM'))()
+
+-- Main Window
+local Window = Library.CreateWindow({
+    Name = "ZAPORIUM",
+    LoadingTitle = "Zaporium",
+    ConfigurationSaving = {Enabled = false},
+    AccentColor = Color3.fromRGB(0, 212, 255),
+    Logo = "rbxassetid://112586636995159",
+    Credit = "Created by ScriptZap",
+    EnableBooting = true
+})
+
+-- TABS ORDER: Info → Farm → Misc
+local InfoTab = Window:CreateTab("Info")
+local FarmTab = Window:CreateTab("Farm")
+local MiscTab = Window:CreateTab("Misc")
+
+-- ==================== INFO TAB ====================
+InfoTab:CreateLabel("Welcome to ZAPORIUM!")
+InfoTab:CreateLabel("Thank you so much for using my script! ❤️")
+InfoTab:CreateLabel("Made with love • Fassion")
+InfoTab:CreateLabel("I hope you enjoy every second using it!")
+InfoTab:CreateLabel("Your support keeps me going! 🚀")
+InfoTab:CreateLabel("")
+InfoTab:CreateLabel("~ ScriptZap")
+InfoTab:CreateLabel("ZAPORIUM • Simple, Clean, Powerful")
+
+InfoTab:CreateButton({
+    Name = "Join Discord Server",
+    Callback = function()
+        setclipboard("https://discord.gg/VFQpaEcy")
+        Window:Notify("Discord link copied to clipboard!", 4)
+    end
+})
+
+-- ==================== FARM TAB - AUTO FARM CASH ====================
+local farmEnabled = false
+local connections = {}
+
+FarmTab:CreateToggle({
+    Name = "Auto Farm Cash",
+    CurrentValue = false,
+    Callback = function(value)
+        farmEnabled = value
+
+        if value then
+            Window:Notify("Auto Farm ENABLED • Farming at 250 speed!", 5)
+
+            -- === YOUR FULL FARM SCRIPT (unchanged logic) ===
+            local SPEED = 250
+            local TELEPORT_EVERY = 10
+
+            local targetCFrame = CFrame.new(
+            -1629.26978, 1.93928003, 2388.29175,
+            -0.185611904, -0.0275861081, 0.982235849,
+            1.14309705e-06, 0.999605834, 0.0280741602,
+            -0.98262316, 0.00521202106, -0.185538709
+            )
+
+            local currentVehicle = nil
+            local mainPart = nil
+
+            local function getCurrentBike()
+                local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+                if humanoid and humanoid.SeatPart then
+                    local seat = humanoid.SeatPart
+                    local vehicleModel = seat.Parent
+                    if vehicleModel and workspace.Vehicles:FindFirstChild(LocalPlayer.Name) then
+                        if vehicleModel.Parent == workspace.Vehicles[LocalPlayer.Name] or vehicleModel:IsDescendantOf(workspace.Vehicles[LocalPlayer.Name]) then
+                            return vehicleModel, seat
+                        end
+                    end
+                end
+                return nil, nil
+            end
+
+            connections.heartbeat = RunService.Heartbeat:Connect(function()
+                if not farmEnabled then return end
+
+                local vehicle, seat = getCurrentBike()
+                if vehicle and seat then
+                    if currentVehicle ~= vehicle then
+                        currentVehicle = vehicle
+                        mainPart = vehicle.PrimaryPart or seat
+                        if not vehicle.PrimaryPart then vehicle.PrimaryPart = mainPart end
+                        vehicle:SetNetworkOwner(LocalPlayer)
+                        Window:Notify("Bike Locked • Straight + Crash-Proof", 3)
+                    end
+
+                    pcall(function()
+                        local vel = vehicle:FindFirstChild("Tuner", true) and vehicle.Tuner.Interface.Values:FindFirstChild("Velocity")
+                        if vel then vel.Value = SPEED end
+                    end)
+
+                    pcall(function()
+                        local cf = mainPart.CFrame
+                        local pos = cf.Position
+                        local horiz_fwd = Vector3.new(cf.LookVector.X, 0, cf.LookVector.Z).Unit
+                        local upright_cf = CFrame.lookAt(pos, pos + horiz_fwd, Vector3.yAxis)
+                        vehicle:PivotTo(upright_cf)
+                        mainPart.AssemblyLinearVelocity = upright_cf.LookVector * SPEED
+                        mainPart.AssemblyAngularVelocity = Vector3.zero
+                        seat.Throttle = 1
+                        seat.Steer = 0
+                    end)
+
+                    for _, obj in pairs(vehicle:GetDescendants()) do
+                        if obj:IsA("BodyVelocity") or obj:IsA("BodyAngularVelocity") or obj:IsA("BodyPosition") then
+                            obj:Destroy()
+                        end
+                    end
+                else
+                    currentVehicle = nil
+                end
+            end)
+
+            connections.teleportLoop = spawn(function()
+                while farmEnabled and wait(TELEPORT_EVERY) do
+                    local vehicle, _ = getCurrentBike()
+                    if vehicle then
+                        vehicle:PivotTo(targetCFrame)
+                        Window:Notify("Auto Farm Cash!", 2)
+                    end
+                end
+            end)
+
+            connections.autoSit = spawn(function()
+                while farmEnabled and wait(0.6) do
+                    local char = LocalPlayer.Character
+                    if not char or not char:FindFirstChild("HumanoidRootPart") then continue end
+                    local hrp = char.HumanoidRootPart
+
+                    for _, bikeFolder in pairs(workspace.Vehicles:GetChildren()) do
+                        if bikeFolder.Name == LocalPlayer.Name then
+                            for _, bike in pairs(bikeFolder:GetChildren()) do
+                                local seat = bike:FindFirstChild("DriveSeat") or bike:FindFirstChildWhichIsA("VehicleSeat")
+                                if seat and (hrp.Position - seat.Position).Magnitude < 15 and not seat.Occupant then
+                                    hrp.CFrame = seat.CFrame
+                                    task.wait(0.2)
+                                    local prompt = seat:FindFirstChildOfClass("ProximityPrompt")
+                                    if prompt then fireproximityprompt(prompt) end
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+
+        else
+            -- Turn OFF
+            Window:Notify("Auto Farm DISABLED", 4)
+            for _, conn in pairs(connections) do
+                if conn.Disconnect then conn:Disconnect() end
+            end
+            connections = {}
+        end
+    end
+})
+
+-- ==================== MISC TAB (100% unchanged) ====================
+MiscTab:CreateButton({
+    Name = "Hop Server",
+    Callback = function()
+        Window:Notify("Hopping to a new server...", 3)
+        local servers = game.HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
+        local available = {}
+        for _, v in pairs(servers.data) do
+            if v.playing < v.maxPlayers and v.id ~= game.JobId then
+                table.insert(available, v.id)
+            end
+        end
+        if #available > 0 then
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, available[math.random(1, #available)], LocalPlayer)
+        else
+            Window:Notify("No available servers found!", 4)
+        end
+    end
+})
+
+MiscTab:CreateSlider({
+    Name = "WalkSpeed",
+    Min = 16,
+    Max = 300,
+    Default = 16,
+    Callback = function(value)
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = value
+        end
+        LocalPlayer.CharacterAdded:Connect(function(char)
+            task.wait()
+            if char:FindFirstChild("Humanoid") then
+                char.Humanoid.WalkSpeed = value
+            end
+        end)
+    end
+})
+
+MiscTab:CreateButton({
+    Name = "Rejoin Server",
+    Callback = function()
+        Window:Notify("Rejoining server...", 3)
+        task.wait(0.3)
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end
+})
+
+-- Final Load Notification
+Window:Notify("ZAPORIUM Loaded • Anti-AFK Active", 6)
