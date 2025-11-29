@@ -48,7 +48,7 @@ InfoTab:CreateButton({
     end
 })
 
--- ==================== FARM TAB - AUTO FARM CASH ====================
+-- ==================== FARM TAB - AUTO FARM CASH (UNCHANGED) ====================
 local farmEnabled = false
 local connections = {}
 
@@ -59,9 +59,8 @@ FarmTab:CreateToggle({
         farmEnabled = value
 
         if value then
-            Window:Notify("Auto Farm ENABLED • Farming at 250 speed!", 5)
+            Window:Notify("Auto Farm ENABLED", 5)
 
-            -- === YOUR FULL FARM SCRIPT (unchanged logic) ===
             local SPEED = 250
             local TELEPORT_EVERY = 10
 
@@ -99,7 +98,7 @@ FarmTab:CreateToggle({
                         mainPart = vehicle.PrimaryPart or seat
                         if not vehicle.PrimaryPart then vehicle.PrimaryPart = mainPart end
                         vehicle:SetNetworkOwner(LocalPlayer)
-                        Window:Notify("Bike Locked • Straight + Crash-Proof", 3)
+                        Window:Notify("Bike Farm", 3)
                     end
 
                     pcall(function()
@@ -162,13 +161,121 @@ FarmTab:CreateToggle({
             end)
 
         else
-            -- Turn OFF
             Window:Notify("Auto Farm DISABLED", 4)
             for _, conn in pairs(connections) do
                 if conn.Disconnect then conn:Disconnect() end
             end
             connections = {}
         end
+    end
+})
+
+-- ==================== NEW: AUTO RACE FARMER (FARM TAB) ====================
+local raceFarmEnabled = false
+local raceConnections = {}
+local racing = false
+
+local startCFrame = CFrame.new(-1232.76, 12.39, 2300.38)
+
+local function teleportWithVehicle(cframe)
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local root = char:WaitForChild("HumanoidRootPart")
+    local humanoid = char:WaitForChild("Humanoid")
+
+    if humanoid.Sit and root.Anchored == false then
+        local seat = humanoid.SeatPart
+        if seat and seat.Parent then
+            local vehicle = seat.Parent
+            vehicle:PivotTo(cframe)
+            task.wait(0.05)
+            return true
+        end
+    end
+
+    root.CFrame = cframe
+    return true
+end
+
+local function doFullRace()
+    local checkpoints = {
+        workspace.Race1.Checkpoints.Checkpoint1,
+        workspace.Race1.Checkpoints.Checkpoint2
+    }
+    for i, cp in ipairs(checkpoints) do
+        if not raceFarmEnabled then return end
+        if cp and cp:IsA("BasePart") then
+            teleportWithVehicle(cp.CFrame + Vector3.new(0, 4, 0))
+            task.wait(0.7)
+        end
+    end
+    task.wait(1)
+    teleportWithVehicle(startCFrame)
+end
+
+local function setupCountdown(raceGui)
+    if not raceGui or not raceGui:FindFirstChild("CountdownLabel") then return end
+    local countdownLabel = raceGui.CountdownLabel
+
+    raceConnections.countdown = countdownLabel:GetPropertyChangedSignal("Text"):Connect(function()
+        if not raceFarmEnabled then return end
+        local text = countdownLabel.Text
+        if not racing and string.find(string.upper(text), "GO") then
+            racing = true
+            Window:Notify("Autofarm Race!", 3)
+            task.spawn(function()
+                doFullRace()
+                task.wait(3)
+                racing = false
+            end)
+        end
+    end)
+end
+
+FarmTab:CreateToggle({
+    Name = "Auto Race Farmer (Turn On before Start)",
+    CurrentValue = false,
+    Callback = function(value)
+        raceFarmEnabled = value
+
+        if value then
+            Window:Notify("Auto Race Farmer ENABLED • Waiting for GO!!!", 6)
+
+            -- Watch for existing + future RaceGui
+            local existing = LocalPlayer.PlayerGui:FindFirstChild("RaceGui")
+            if existing then setupCountdown(existing) end
+
+            raceConnections.childAdded = LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
+                if child.Name == "RaceGui" then
+                    task.wait(0.5)
+                    setupCountdown(child)
+                end
+            end)
+
+        else
+            Window:Notify("Auto Race Farmer DISABLED", 4)
+            racing = false
+            for _, conn in pairs(raceConnections) do
+                if conn.Disconnect then conn:Disconnect() end
+            end
+            raceConnections = {}
+        end
+    end
+})
+
+-- Optional Manual Buttons (you can keep or remove)
+FarmTab:CreateButton({
+    Name = "Manual Finish Race",
+    Callback = function()
+        task.spawn(doFullRace)
+        Window:Notify("Manual race started!", 3)
+    end
+})
+
+FarmTab:CreateButton({
+    Name = "TP to Race Start",
+    Callback = function()
+        teleportWithVehicle(startCFrame)
+        Window:Notify("Teleported to race start!", 3)
     end
 })
 
@@ -220,4 +327,4 @@ MiscTab:CreateButton({
 })
 
 -- Final Load Notification
-Window:Notify("ZAPORIUM Loaded • Anti-AFK Active", 6)
+Window:Notify("ZAPORIUM Loaded • Anti-AFK + Auto Race Ready!", 6)
