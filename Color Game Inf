@@ -1,0 +1,169 @@
+local Players = game:GetService("Players")
+local VirtualUser = game:GetService("VirtualUser")
+local TeleportService = game:GetService("TeleportService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+-- Permanent Anti-AFK (Always ON)
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0, 0, 0), workspace.CurrentCamera.CFrame)
+end)
+
+-- Load Zaporium UI Library
+local Library = loadstring(game:HttpGet('https://raw.githubusercontent.com/cheyt2025-cyber/HAYS-AI/refs/heads/main/ZAPORIUM'))()
+
+-- Main Window
+local Window = Library.CreateWindow({
+    Name = "ZAPORIUM",
+    LoadingTitle = "Zaporium",
+    ConfigurationSaving = {Enabled = false},
+    AccentColor = Color3.fromRGB(0, 212, 255),
+    Logo = "rbxassetid://112586636995159",
+    Credit = "Created by ScriptZap",
+    EnableBooting = true
+})
+
+-- Info Tab (1st)
+local InfoTab = Window:CreateTab("Info")
+
+InfoTab:CreateLabel("Welcome to ZAPORIUM!")
+InfoTab:CreateLabel("Thank you so much for using my script! ❤️")
+InfoTab:CreateLabel("Made with love • Fassion")
+InfoTab:CreateLabel("I hope you enjoy every second using it!")
+InfoTab:CreateLabel("Your support keeps me going! 🚀")
+InfoTab:CreateLabel("")
+InfoTab:CreateLabel("~ ScriptZap")
+InfoTab:CreateLabel("ZAPORIUM • Simple, Clean, Powerful")
+
+InfoTab:CreateButton({
+    Name = "Join Discord Server",
+    Callback = function()
+        setclipboard("https://discord.gg/FCwb52g5")
+        Window:Notify("Discord link copied to clipboard!", 4)
+    end
+})
+
+-- FARM TAB (2nd - NOW BETWEEN INFO AND MISC)
+local FarmTab = Window:CreateTab("Farm")
+
+local spinLoop, mysteryLoop, goldBombLoop
+
+-- Inf Spin
+FarmTab:CreateToggle({
+    Name = "Inf Spin",
+    Default = false,
+    Callback = function(state)
+        if state then
+            spinLoop = task.spawn(function()
+                while task.wait(1) do
+                    if not getgenv().InfSpinEnabled then break end
+                    pcall(function()
+                        ReplicatedStorage.Remotes.AddRewardEvent:FireServer("Spins", 1)
+                    end)
+                end
+            end)
+            getgenv().InfSpinEnabled = true
+        else
+            getgenv().InfSpinEnabled = false
+            if spinLoop then task.cancel(spinLoop) end
+        end
+    end
+})
+
+-- Inf Mystery Box
+FarmTab:CreateToggle({
+    Name = "Inf Mystery Box",
+    Default = false,
+    Callback = function(state)
+        if state then
+            mysteryLoop = task.spawn(function()
+                while task.wait(1) do
+                    if not getgenv().InfMysteryEnabled then break end
+                    pcall(function()
+                        ReplicatedStorage.Remotes.MysteryBoxEvent:FireServer()
+                    end)
+                end
+            end)
+            getgenv().InfMysteryEnabled = true
+        else
+            getgenv().InfMysteryEnabled = false
+            if mysteryLoop then task.cancel(mysteryLoop) end
+        end
+    end
+})
+
+-- Inf Gold Bomb
+FarmTab:CreateToggle({
+    Name = "Inf Gold Bomb",
+    Default = false,
+    Callback = function(state)
+        if state then
+            goldBombLoop = task.spawn(function()
+                while task.wait(1) do
+                    if not getgenv().InfGoldBombEnabled then break end
+                    pcall(function()
+                        ReplicatedStorage.Remotes.AddRewardEvent:FireServer("Gold Bombs", 1)
+                    end)
+                end
+            end)
+            getgenv().InfGoldBombEnabled = true
+        else
+            getgenv().InfGoldBombEnabled = false
+            if goldBombLoop then task.cancel(goldBombLoop) end
+        end
+    end
+})
+
+-- Misc Tab (3rd - now comes AFTER Farm)
+local MiscTab = Window:CreateTab("Misc")
+
+MiscTab:CreateButton({
+    Name = "Hop Server",
+    Callback = function()
+        Window:Notify("Hopping to a new server...", 3)
+        local servers = game.HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
+        local available = {}
+        for _, v in pairs(servers.data) do
+            if v.playing < v.maxPlayers and v.id ~= game.JobId then
+                table.insert(available, v.id)
+            end
+        end
+        if #available > 0 then
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, available[math.random(1, #available)], LocalPlayer)
+        else
+            Window:Notify("No available servers found!", 4)
+        end
+    end
+})
+
+MiscTab:CreateSlider({
+    Name = "WalkSpeed",
+    Min = 16,
+    Max = 300,
+    Default = 16,
+    Callback = function(value)
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = value
+        end
+        LocalPlayer.CharacterAdded:Connect(function(char)
+            task.wait()
+            if char:FindFirstChild("Humanoid") then
+                char.Humanoid.WalkSpeed = value
+            end
+        end)
+    end
+})
+
+MiscTab:CreateButton({
+    Name = "Rejoin Server",
+    Callback = function()
+        Window:Notify("Rejoining server...", 3)
+        task.wait(0.3)
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end
+})
+
+-- Final notification
+Window:Notify("ZAPORIUM Loaded • Anti-AFK ON", 6)
