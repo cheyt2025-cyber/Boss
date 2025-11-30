@@ -1,0 +1,287 @@
+local Players = game:GetService("Players")
+local VirtualUser = game:GetService("VirtualUser")
+local TeleportService = game:GetService("TeleportService")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+-- Permanent Anti-AFK
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+end)
+
+-- Load Zaporium UI Library
+local Library = loadstring(game:HttpGet('https://raw.githubusercontent.com/cheyt2025-cyber/HAYS-AI/refs/heads/main/ZAPORIUM'))()
+
+-- Main Window
+local Window = Library.CreateWindow({
+    Name = "ZAPORIUM",
+    LoadingTitle = "Zaporium",
+    ConfigurationSaving = {Enabled = false},
+    AccentColor = Color3.fromRGB(0, 212, 255),
+    Logo = "rbxassetid://112586636995159",
+    Credit = "Created by ScriptZap",
+    EnableBooting = true
+})
+
+-- Tabs
+local InfoTab = Window:CreateTab("Info")
+local farmTab = Window:CreateTab("Farm")
+local MiscTab = Window:CreateTab("Misc")
+
+-- Info Tab
+InfoTab:CreateLabel("Welcome to ZAPORIUM!")
+InfoTab:CreateLabel("Thank you so much for using my script!")
+InfoTab:CreateLabel("Made with love • Fassion")
+InfoTab:CreateLabel("I hope you enjoy every second using it!")
+InfoTab:CreateLabel("Your support keeps me going!")
+InfoTab:CreateLabel("")
+InfoTab:CreateLabel("~ ScriptZap")
+InfoTab:CreateLabel("ZAPORIUM • Simple, Clean, Powerful")
+
+InfoTab:CreateButton({
+    Name = "Join Discord Server",
+    Callback = function()
+        setclipboard("https://discord.gg/FCwb52g5")
+        Window:Notify("Discord link copied to clipboard!", 4)
+    end
+})
+
+------------------------------------------------------------------------------------------------
+-- AUTO STEAL (Rare Farmer) - FIXED & WORKING
+------------------------------------------------------------------------------------------------
+local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local hrp = character:WaitForChild("HumanoidRootPart")
+local humanoid = character:WaitForChild("Humanoid")
+
+local SAFE_ZONE = Vector3.new(-3.40, 4.00, -13.98)
+local CHECKPOINT_1 = Vector3.new(180.00, 53.50, -94.88)
+local CHECKPOINT_2 = Vector3.new(-181.99, 53.50, -110.70)
+local FLY_SPEED_FAST = 140
+local FLY_SPEED_SLOW = 40
+local APPROACH_DISTANCE = 2
+local RARE_RARITIES = {"Legendary", "Mythic", "God", "Secret"}
+local NPC_FOLDER = workspace.Map.Zones.Field.NPC
+
+local flying = false
+local targetPos = nil
+local isFarming = false
+local stealHeartbeat, stealRespawn
+
+local function startFlying() if flying then return end flying = true humanoid.PlatformStand = true end
+local function stopFlying() if not flying then return end flying = false humanoid.PlatformStand = false hrp.Velocity = Vector3.new(0,0,0) end
+
+local function flyTo(pos, cb)
+    targetPos = pos startFlying()
+    local conn; conn = RunService.Heartbeat:Connect(function()
+        if not hrp.Parent or not targetPos then conn:Disconnect() return end
+        local dir = (targetPos - hrp.Position)
+        if dir.Magnitude < APPROACH_DISTANCE then
+            hrp.Velocity = Vector3.new(0,0,0)
+            conn:Disconnect() stopFlying()
+            if cb then task.spawn(cb) end
+        else
+            local speed = dir.Magnitude < 15 and FLY_SPEED_SLOW or FLY_SPEED_FAST
+            hrp.Velocity = dir.Unit * speed
+        end
+    end)
+end
+
+local function triggerPickup(npc)
+    local prompts = npc:FindFirstChild("Prompts")
+    if not prompts then return false end
+    local p = prompts:FindFirstChild("Pickup")
+    if not p then return false end
+    hrp.CFrame = npc.HumanoidRootPart.CFrame * CFrame.new(0,5,0)
+    task.wait(0.2)
+    for i = 1, 5 do
+        fireproximityprompt(p, 0)
+        fireproximityprompt(p, 1)
+        task.wait(0.1)
+    end
+    return true
+end
+
+-- FIXED: No more ?. syntax
+local function getRarity(npc)
+    local overhead = npc:FindFirstChild("OverheadAttachment")
+    if not overhead then return nil end
+    local charInfo = overhead:FindFirstChild("CharacterInfo")
+    if not charInfo then return nil end
+    local frame = charInfo:FindFirstChild("Frame")
+    if not frame then return nil end
+    local rarity = frame:FindFirstChild("Rarity")
+    if rarity and rarity:IsA("TextLabel") then
+        return rarity.Text
+    end
+    return nil
+end
+
+local function huntRares()
+    if isFarming then return end
+    for _, npc in NPC_FOLDER:GetChildren() do
+        if npc:IsA("Model") and npc:FindFirstChild("HumanoidRootPart") then
+            local rarity = getRarity(npc)
+            if rarity and table.find(RARE_RARITIES, rarity) then
+                isFarming = true
+                flyTo(npc.HumanoidRootPart.Position + Vector3.new(0,3,0), function()
+                    if triggerPickup(npc) then
+                        local dist1 = (hrp.Position - CHECKPOINT_1).Magnitude
+                        local dist2 = (hrp.Position - CHECKPOINT_2).Magnitude
+                        local cp = dist1 <= dist2 and CHECKPOINT_1 or CHECKPOINT_2
+                        flyTo(cp + Vector3.new(0,4,0), function()
+                            task.wait(2)
+                            flyTo(SAFE_ZONE + Vector3.new(0,4,0), function()
+                                task.wait(0.5)
+                                isFarming = false
+                            end)
+                        end)
+                    else
+                        isFarming = false
+                    end
+                end)
+                return
+            end
+        end
+    end
+end
+
+farmTab:CreateToggle({
+    Name = "Auto Steal (Legendary+)",
+    Default = false,
+    Callback = function(v)
+        if v then
+            Window:Notify("Auto Steal Activated!", 4)
+            stealHeartbeat = RunService.Heartbeat:Connect(function()
+                if not isFarming then huntRares() end
+            end)
+            stealRespawn = LocalPlayer.CharacterAdded:Connect(function(c)
+                character = c
+                hrp = c:WaitForChild("HumanoidRootPart")
+                humanoid = c:WaitForChild("Humanoid")
+                stopFlying()
+                isFarming = false
+            end)
+        else
+            Window:Notify("Auto Steal Disabled", 4)
+            isFarming = false
+            if stealHeartbeat then stealHeartbeat:Disconnect() end
+            if stealRespawn then stealRespawn:Disconnect() end
+            stopFlying()
+        end
+    end
+})
+
+------------------------------------------------------------------------------------------------
+-- ULTRA-FAST AUTO COLLECT (2025) – Already perfect
+------------------------------------------------------------------------------------------------
+local currentPlot = nil
+local touchableParts = {}
+local collectEnabled = false
+
+local function getCurrentPlot()
+    if not (character and hrp) then return nil end
+    local pos = hrp.Position
+    for _, plot in ipairs(workspace.Map.Plots:GetChildren()) do
+        local floor = plot:FindFirstChild("Floor") or plot:FindFirstChild("Base") or plot:FindFirstChild("Plot")
+        if floor then
+            local part = floor:FindFirstChildWhichIsA("BasePart")
+            if part then
+                local cf, size = part.CFrame, part.Size
+                local min = cf.Position - size/2
+                local max = cf.Position + size/2
+                if pos.X > min.X and pos.X < max.X and pos.Z > min.Z and pos.Z < max.Z then
+                    local owner = plot:FindFirstChild("Owner")
+                    if owner and owner.Value ~= LocalPlayer then continue end
+                    return plot
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function updateTouchableParts(plot)
+    touchableParts[plot] = {}
+    local slots = plot:FindFirstChild("Slots") or plot:FindFirstChild("Purchased") or plot:FindFirstChild("Items")
+    if not slots then return end
+    for _, slot in ipairs(slots:GetChildren()) do
+        local button = slot:FindFirstChild("Button") or slot:FindFirstChild("ButtonPart") or slot:FindFirstChild("Collector")
+        if button then
+            local target = button:FindFirstChild("Top") or button:FindFirstChild("Head") or
+            button:FindFirstChild("Touch") or button:FindFirstChild("Part") or
+            button:FindFirstChildWhichIsA("BasePart")
+            if target and target:FindFirstChild("TouchInterest") then
+                table.insert(touchableParts[plot], target)
+            end
+        end
+        for _, part in ipairs(slot:GetDescendants()) do
+            if part:IsA("BasePart") and part:FindFirstChild("TouchInterest") then
+                table.insert(touchableParts[plot], part)
+            end
+        end
+    end
+end
+
+local function fastCollect()
+    if not currentPlot or not hrp then return end
+    local parts = touchableParts[currentPlot]
+    if not parts or #parts == 0 then
+        updateTouchableParts(currentPlot)
+        parts = touchableParts[currentPlot]
+    end
+    if not parts then return end
+    for _, part in ipairs(parts) do
+        firetouchinterest(hrp, part, 0)
+        firetouchinterest(hrp, part, 1)
+    end
+end
+
+RunService.Heartbeat:Connect(function()
+    local plot = getCurrentPlot()
+    if plot ~= currentPlot then
+        currentPlot = plot
+        if currentPlot then
+            print("Auto Collector Locked →", currentPlot.Name)
+            touchableParts[currentPlot] = {}
+            updateTouchableParts(currentPlot)
+        end
+    end
+end)
+
+RunService.Stepped:Connect(function()
+    if collectEnabled and currentPlot and hrp then
+        pcall(fastCollect)
+    end
+end)
+
+spawn(function()
+    while task.wait(10) do
+        if collectEnabled and currentPlot then
+            updateTouchableParts(currentPlot)
+        end
+    end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    character = newChar
+    hrp = newChar:WaitForChild("HumanoidRootPart")
+end)
+
+farmTab:CreateToggle({
+    Name = "Auto Collect (Notes: Stay on base)",
+    Default = false,
+    Callback = function(state)
+        collectEnabled = state
+        Window:Notify(state and "ULTRA-FAST Auto Collect ENABLED" or "Auto Collect Disabled", 5)
+    end
+})
+
+-- Misc
+MiscTab:CreateButton({ Name = "Hop Server", Callback = function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end })
+MiscTab:CreateSlider({ Name = "WalkSpeed", Min = 16, Max = 300, Default = 16, Callback = function(v) if humanoid then humanoid.WalkSpeed = v end end })
+MiscTab:CreateButton({ Name = "Rejoin", Callback = function() TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer) end })
+
+Window:Notify("ZAPORIUM Loaded!", 7)
+print("ZAPORIUM 2025 FULLY LOADED!")
