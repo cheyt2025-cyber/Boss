@@ -1,0 +1,166 @@
+local Players = game:GetService("Players")
+local VirtualUser = game:GetService("VirtualUser")
+local TeleportService = game:GetService("TeleportService")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+local LocalPlayer = Players.LocalPlayer
+
+-- Permanent Anti-AFK
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+end)
+
+-- Load Zaporium UI Library
+local Library = loadstring(game:HttpGet('https://raw.githubusercontent.com/cheyt2025-cyber/HAYS-AI/refs/heads/main/ZAPORIUM'))()
+
+-- Main Window
+local Window = Library.CreateWindow({
+    Name = "ZAPORIUM",
+    LoadingTitle = "Zaporium",
+    ConfigurationSaving = {Enabled = false},
+    AccentColor = Color3.fromRGB(0, 212, 255),
+    Logo = "rbxassetid://112586636995159",
+    Credit = "Created by ScriptZap",
+    EnableBooting = true
+})
+
+-- Info Tab
+local InfoTab = Window:CreateTab("Info")
+InfoTab:CreateLabel("Welcome to ZAPORIUM!")
+InfoTab:CreateLabel("Thank you so much for using my script! ❤️")
+InfoTab:CreateLabel("Made with love • Fassion")
+InfoTab:CreateLabel("I hope you enjoy every second using it!")
+InfoTab:CreateLabel("Your support keeps me going! 🚀")
+InfoTab:CreateLabel("")
+InfoTab:CreateLabel("~ ScriptZap")
+InfoTab:CreateLabel("ZAPORIUM • Simple, Clean, Powerful")
+
+InfoTab:CreateButton({
+    Name = "Join Discord Server",
+    Callback = function()
+        setclipboard("https://discord.gg/FCwb52g5")
+        Window:Notify("Discord link copied to clipboard!", 4)
+    end
+})
+
+-- ═══════════════════════════════════════
+--               FARM TAB - AUTO FARM
+-- ═══════════════════════════════════════
+local FarmTab = Window:CreateTab("Farm")
+
+local autoFarmEnabled = false
+
+local function makeMyHurricaneGodMode()
+    if not autoFarmEnabled then return end
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local hurricaneMesh = char:FindFirstChild("HurricaneMesh")
+    if not hurricaneMesh then return end
+
+    local hitbox = hurricaneMesh:FindFirstChild("HurricaneHitbox")
+    if not hitbox then return end
+
+    -- Visual + infinite growth (only YOUR hitbox)
+    hitbox.Transparency = 0.5
+    hitbox.BrickColor = BrickColor.new("Really red")
+    hitbox.Material = Enum.Material.ForceField
+    hitbox.CanCollide = false
+
+    spawn(function()
+        local size = 100
+        while autoFarmEnabled and hitbox and hitbox.Parent do
+            size = size + 50  -- grows extremely fast
+            hitbox.Size = Vector3.new(size, size, size)
+            RunService.Heartbeat:Wait()
+        end
+    end)
+end
+
+FarmTab:CreateToggle({
+    Name = "Auto Farm",
+    CurrentValue = false,
+    Callback = function(state)
+        autoFarmEnabled = state
+
+        if state then
+            Window:Notify("Auto Farm ON", 5)
+
+            -- Check immediately + when character respawns
+            makeMyHurricaneGodMode()
+            LocalPlayer.CharacterAdded:Connect(function()
+                task.wait(1)
+                makeMyHurricaneGodMode()
+            end)
+
+            -- Also monitor if HurricaneMesh spawns later
+            LocalPlayer.CharacterAppearanceLoaded:Connect(function(char)
+                task.wait(2)
+                local hurricaneMesh = char:WaitForChild("HurricaneMesh", 10)
+                if hurricaneMesh and autoFarmEnabled then
+                    hurricaneMesh.ChildAdded:Connect(function(child)
+                        if child.Name == "HurricaneHitbox" and autoFarmEnabled then
+                            task.wait(0.1)
+                            makeMyHurricaneGodMode()
+                        end
+                    end)
+                end
+            end)
+
+        else
+            Window:Notify("Auto Farm OFF", 3)
+        end
+    end
+})
+
+-- Misc Tab (exactly the same as before)
+local MiscTab = Window:CreateTab("Misc")
+
+MiscTab:CreateButton({
+    Name = "Hop Server",
+    Callback = function()
+        Window:Notify("Hopping to a new server...", 3)
+        local servers = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
+        local available = {}
+        for _, v in pairs(servers.data) do
+            if v.playing < v.maxPlayers and v.id ~= game.JobId then
+                table.insert(available, v.id)
+            end
+        end
+        if #available > 0 then
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, available[math.random(1, #available)], LocalPlayer)
+        else
+            Window:Notify("No available servers found!", 4)
+        end
+    end
+})
+
+MiscTab:CreateSlider({
+    Name = "WalkSpeed",
+    Min = 16,
+    Max = 300,
+    Default = 16,
+    Callback = function(value)
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = value
+        end
+        LocalPlayer.CharacterAdded:Connect(function(char)
+            task.wait()
+            if char:FindFirstChild("Humanoid") then
+                char.Humanoid.WalkSpeed = value
+            end
+        end)
+    end
+})
+
+MiscTab:CreateButton({
+    Name = "Rejoin Server",
+    Callback = function()
+        Window:Notify("Rejoining server...", 3)
+        task.wait(0.3)
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end
+})
+
+-- Final notification
+Window:Notify("ZAPORIUM Loaded!", 6)
