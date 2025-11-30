@@ -1,0 +1,316 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local VirtualUser = game:GetService("VirtualUser")
+local TeleportService = game:GetService("TeleportService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+-- Permanent Anti-AFK
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+end)
+
+-- Load Zaporium UI Library
+local Library = loadstring(game:HttpGet('https://raw.githubusercontent.com/cheyt2025-cyber/HAYS-AI/refs/heads/main/ZAPORIUM'))()
+
+-- Main Window
+local Window = Library.CreateWindow({
+    Name = "ZAPORIUM",
+    LoadingTitle = "Zaporium",
+    ConfigurationSaving = {Enabled = false},
+    AccentColor = Color3.fromRGB(0, 212, 255),
+    Logo = "rbxassetid://112586636995159",
+    Credit = "Created by ScriptZap",
+    EnableBooting = true
+})
+
+-- PERFECT NEW ORDER
+local InfoTab     = Window:CreateTab("Info")
+local FarmTab     = Window:CreateTab("Farm")      -- NEW: Inf Cash here
+local EspTab      = Window:CreateTab("Esp")       -- ESP moved here
+local TeleportTab = Window:CreateTab("Teleport")
+local MiscTab     = Window:CreateTab("Misc")
+
+-- ==================== INFO TAB ====================
+InfoTab:CreateLabel("Welcome to ZAPORIUM!")
+InfoTab:CreateLabel("Best script ever made.")
+InfoTab:CreateLabel("Made with love • Fassion")
+InfoTab:CreateLabel("Thank you for using!")
+InfoTab:CreateLabel("")
+InfoTab:CreateLabel("~ ScriptZap")
+InfoTab:CreateLabel("ZAPORIUM • Clean & Deadly")
+
+InfoTab:CreateButton({
+    Name = "Join Discord Server",
+    Callback = function()
+        setclipboard("https://discord.gg/FCwb52g5")
+        Window:Notify("Discord link copied!", 4)
+    end
+})
+
+-- ==================== FARM TAB - INF CASH ====================
+local infCashLoop = nil
+
+FarmTab:CreateToggle({
+    Name = "Inf Cash",
+    CurrentValue = false,
+    Callback = function(state)
+        if state then
+            infCashLoop = task.spawn(function()
+                while task.wait(1) do
+                    if not getgenv().InfCashEnabled then break end
+                    pcall(function()
+                        ReplicatedStorage
+                        :WaitForChild("Network")
+                        :WaitForChild("RemoteEvent")
+                        :FireServer("Coins:AwardDistance")
+                    end)
+                end
+            end)
+            getgenv().InfCashEnabled = true
+            Window:Notify("Inf Cash Activated!", 3)
+        else
+            getgenv().InfCashEnabled = false
+            if infCashLoop then task.cancel(infCashLoop) end
+            Window:Notify("Inf Cash Stopped", 3)
+        end
+    end
+})
+
+-- ==================== ESP TAB (MOVED HERE) ====================
+local THINGS = workspace:WaitForChild("__THINGS", 10)
+local highlights = {}
+local espGUIs = {}
+local ESP_HIDER_ENABLED = false
+local ESP_SEEKER_ENABLED = false
+
+local SEEKER_COLOR = Color3.fromRGB(255, 60, 60)
+local HIDER_COLOR  = Color3.fromRGB(60, 160, 255)
+local TEXT_COLOR   = Color3.fromRGB(255, 255, 255)
+
+local function createRoleESP(part, roleText, roleColor)
+    local bill = Instance.new("BillboardGui")
+    bill.Name = "RoleESP"
+    bill.Adornee = part
+    bill.Size = UDim2.new(0, 220, 0, 70)
+    bill.StudsOffset = Vector3.new(0, 3.8, 0)
+    bill.AlwaysOnTop = true
+    bill.Parent = part
+
+    local frame = Instance.new("Frame", bill)
+    frame.Size = UDim2.new(1, 0, 1, 0)
+    frame.BackgroundColor3 = Color3.new(0, 0, 0)
+    frame.BackgroundTransparency = 0.35
+    frame.BorderSizePixel = 0
+
+    local corner = Instance.new("UICorner", frame)
+    corner.CornerRadius = UDim.new(0, 12)
+
+    local stroke = Instance.new("UIStroke", frame)
+    stroke.Color = roleColor
+    stroke.Thickness = 3
+    stroke.Transparency = 0.1
+
+    local label = Instance.new("TextLabel", frame)
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = roleText
+    label.TextColor3 = TEXT_COLOR
+    label.TextStrokeTransparency = 0
+    label.TextStrokeColor3 = Color3.new(0, 0, 0)
+    label.Font = Enum.Font.GothamBlack
+    label.TextSize = 26
+
+    local distLabel = Instance.new("TextLabel", frame)
+    distLabel.Size = UDim2.new(1, 0, 0.4, 0)
+    distLabel.Position = UDim2.new(0, 0, 0.6, 0)
+    distLabel.BackgroundTransparency = 1
+    distLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
+    distLabel.TextStrokeTransparency = 0.7
+    distLabel.Font = Enum.Font.Gotham
+    distLabel.TextSize = 16
+
+    local conn
+    conn = RunService.Heartbeat:Connect(function()
+        if not part.Parent then conn:Disconnect(); bill:Destroy(); return end
+        local root = part.Parent:FindFirstChild("HumanoidRootPart")
+        local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if root and myRoot then
+            local dist = (root.Position - myRoot.Position).Magnitude
+            distLabel.Text = string.format("%.0fm", dist)
+        end
+    end)
+
+    return bill
+end
+
+local function applyVisual(model, roleText, roleColor)
+    if model == LocalPlayer.Character then return end
+    if not highlights[model] then
+        local hl = Instance.new("Highlight")
+        hl.FillColor = roleColor
+        hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+        hl.FillTransparency = 0.3
+        hl.OutlineTransparency = 0
+        hl.Adornee = model
+        hl.Parent = model
+        highlights[model] = hl
+    end
+    if not espGUIs[model] then
+        local head = model:FindFirstChild("Head") or model:FindFirstChild("HumanoidRootPart")
+        if head then
+            espGUIs[model] = createRoleESP(head, roleText, roleColor)
+        end
+    end
+end
+
+local function removeVisual(model)
+    if highlights[model] then highlights[model]:Destroy(); highlights[model] = nil end
+    if espGUIs[model] then espGUIs[model]:Destroy(); espGUIs[model] = nil end
+end
+
+local function scanHiders()
+    if not ESP_HIDER_ENABLED or not THINGS then return end
+    for _, obj in ipairs(THINGS:GetChildren()) do
+        if string.sub(obj.Name, 1, 12) == "VisualMorph_" then
+            local playerName = string.sub(obj.Name, 13)
+            local player = Players:FindFirstChild(playerName)
+            if player and player ~= LocalPlayer then
+                applyVisual(obj, "[HIDER]", HIDER_COLOR)
+            end
+        end
+    end
+end
+
+local function scanSeekers()
+    if not ESP_SEEKER_ENABLED then return end
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("Head") and obj ~= LocalPlayer.Character then
+            local player = Players:GetPlayerFromCharacter(obj)
+            if player and player ~= LocalPlayer then
+                applyVisual(obj, "[SEEKER]", SEEKER_COLOR)
+            end
+        end
+    end
+end
+
+-- ESP Toggles in "Esp" Tab
+EspTab:CreateToggle({
+    Name = "ESP Hider (Blue)",
+    CurrentValue = false,
+    Callback = function(state)
+        ESP_HIDER_ENABLED = state
+        if state then scanHiders(); Window:Notify("Hider ESP ON", 2)
+        else
+            for model, _ in pairs(highlights) do
+                if model.Parent == THINGS and string.sub(model.Name, 1, 12) == "VisualMorph_" then
+                    removeVisual(model)
+                end
+            end
+            Window:Notify("Hider ESP OFF", 2)
+        end
+    end
+})
+
+EspTab:CreateToggle({
+    Name = "ESP Seeker (Red)",
+    CurrentValue = false,
+    Callback = function(state)
+        ESP_SEEKER_ENABLED = state
+        if state then scanSeekers(); Window:Notify("Seeker ESP ON", 2)
+        else
+            for model, _ in pairs(highlights) do
+                if model:FindFirstChild("Humanoid") and Players:GetPlayerFromCharacter(model) then
+                    removeVisual(model)
+                end
+            end
+            Window:Notify("Seeker ESP OFF", 2)
+        end
+    end
+})
+
+-- Live Detection
+if THINGS then
+    THINGS.ChildAdded:Connect(function(c) task.wait(0.6)
+        if ESP_HIDER_ENABLED and string.sub(c.Name, 1, 12) == "VisualMorph_" then
+            local player = Players:FindFirstChild(string.sub(c.Name, 13))
+            if player and player ~= LocalPlayer then applyVisual(c, "[HIDER]", HIDER_COLOR) end
+        end
+    end)
+    THINGS.ChildRemoved:Connect(removeVisual)
+end
+
+workspace.ChildAdded:Connect(function(c) task.wait(1)
+    if ESP_SEEKER_ENABLED and c:IsA("Model") and c:FindFirstChild("Humanoid") and c:FindFirstChild("Head") and c ~= LocalPlayer.Character then
+        local player = Players:GetPlayerFromCharacter(c)
+        if player and player ~= LocalPlayer then applyVisual(c, "[SEEKER]", SEEKER_COLOR) end
+    end
+end)
+workspace.ChildRemoved:Connect(removeVisual)
+
+-- ==================== TELEPORT TAB ====================
+TeleportTab:CreateButton({
+    Name = "Teleport to Lobby",
+    Callback = function()
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-452.77, -6.50, -504.38)
+            Window:Notify("Teleported to Lobby!", 3)
+        end
+    end
+})
+
+TeleportTab:CreateButton({
+    Name = "Teleport to Map",
+    Callback = function()
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-656.01, 45.59, -104.45)
+            Window:Notify("Teleported to Map!", 3)
+        end
+    end
+})
+
+-- ==================== MISC TAB ====================
+MiscTab:CreateButton({
+    Name = "Hop Server",
+    Callback = function()
+        Window:Notify("Hopping server...", 3)
+        local servers = game.HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
+        local available = {}
+        for _, v in pairs(servers.data) do
+            if v.playing < v.maxPlayers and v.id ~= game.JobId then table.insert(available, v.id) end
+        end
+        if #available > 0 then
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, available[math.random(1, #available)], LocalPlayer)
+        else
+            Window:Notify("No servers found!", 4)
+        end
+    end
+})
+
+MiscTab:CreateSlider({
+    Name = "WalkSpeed",
+    Min = 16, Max = 300, Default = 16,
+    Callback = function(v)
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = v
+        end
+        LocalPlayer.CharacterAdded:Connect(function(c)
+            task.wait()
+            if c:FindFirstChild("Humanoid") then c.Humanoid.WalkSpeed = v end
+        end)
+    end
+})
+
+MiscTab:CreateButton({
+    Name = "Rejoin Server",
+    Callback = function()
+        Window:Notify("Rejoining...", 3)
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end
+})
+
+-- Final Load
+Window:Notify("ZAPORIUM Loaded!", 8)
+print("ZAPORIUM FULLY LOADED!")
