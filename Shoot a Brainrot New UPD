@@ -1,5 +1,5 @@
 -- =============================================
--- ZAPORIUM • SHOOT A BRAINROT • v10.70 + BEST ESP (FULLY FIXED)
+-- ZAPORIUM • SHOOT A BRAINROT • v10.80 + CHRISTMAS UPDATE
 -- ONLY Legendary / Secret / Brainrot God / Mythical
 -- =============================================
 
@@ -32,7 +32,7 @@ local focusBrainrot = false
 local currentBrainrot = nil
 local walkSpeed = 16
 
-local allowedRarities = { ["Legendary"] = true, ["Secret"] = true, ["Brainrot God"] = true }
+local allowedRarities = { ["Legendary"] = true, ["Secret"] = true, ["Brainrot God"] = true, ["Mythical"] = true }
 
 local npcRarityData = {
     ["Il Cacto Hipopotamo"] = "Legendary", ["Frigo Camelo"] = "Legendary", ["Svinina Bombardino"] = "Legendary",
@@ -46,9 +46,9 @@ local npcRarityData = {
 }
 
 local gunNames = {
-    "Blade Gun","Chrome Rifle","Comet Blaster","DJ Gun","Dragon Soul","Drum Gun",
-    "Firework Launcher","Minigun","Pistol","Pumpkin Launcher","Purple Flamethrower",
-    "Sentinel","Shotgun","Sniper","Techno Blaster","Time Machine","Cash Gun","Plazma Gun"
+    "Blade Gun","Cash Gun","Christmas Gun","Chrome Rifle","Comet Blaster","DJ Gun","Dragon Soul","Drum Gun",
+    "Firework Launcher","Minigun","Pistol","Plazma Gun","Pumpkin Launcher","Purple Flamethrower",
+    "Sentinel","Shotgun","Sniper","Techno Blaster","Time Machine"
 }
 
 -- ================== CORE FUNCTIONS ==================
@@ -142,7 +142,7 @@ local function isBrainrotGod(name) return npcRarityData[name]=="Brainrot God" en
 local Library = loadstring(game:HttpGet('https://raw.githubusercontent.com/cheyt2025-cyber/HAYS-AI/refs/heads/main/ZAPORIUM'))()
 local Window = Library.CreateWindow({Name="ZAPORIUM",LoadingTitle="Zaporium Loading...",AccentColor=Color3.fromRGB(0,212,255),Logo="rbxassetid://112586636995159",Credit="Created by ScriptZap",EnableBooting=true})
 
-notify("ZAPORIUM v10.70 + BEST ESP Loaded!",8)
+notify("ZAPORIUM v10.80 • CHRISTMAS GUNS UPDATE",10)
 
 local InfoTab = Window:CreateTab("Info")
 local MainTab = Window:CreateTab("Main")
@@ -151,11 +151,10 @@ local ESPTab  = Window:CreateTab("ESP")
 local MiscTab = Window:CreateTab("Misc")
 
 -- ================== INFO TAB ==================
-InfoTab:CreateLabel("Shoot a Brainrot • v10.70")
-InfoTab:CreateLabel("ONLY Legendary, Secret, Brainrot God")
-InfoTab:CreateLabel("NEW: Perrito Burrito, Spaghetti Tualetti, Secret Lucky Block")
-InfoTab:CreateLabel("Thankyou for Using my script Hope You enjoy using it! Send Feedback on My DISCORD")
-InfoTab:CreateLabel("Plazma Gun Auto-Added")
+InfoTab:CreateLabel("Shoot a Brainrot • v10.80")
+InfoTab:CreateLabel("ONLY Legendary / Secret / Brainrot God")
+InfoTab:CreateLabel("NEW: Christmas Gun Auto-Loaded + All Christmas Guns")
+InfoTab:CreateLabel("Thankyou for Using my script Hope You enjoy using it!")
 InfoTab:CreateButton({Name="Join Discord",Callback=function() setclipboard("https://discord.gg/bGNJ5cNh") notify("Discord Link Copied!",5) end})
 
 -- ================== MAIN TAB ==================
@@ -183,13 +182,20 @@ GunsTab:CreateButton({Name="GET ALL GUNS (Instant)",Callback=function()
         notify(c.." Guns Added!",6)
 end})
 
-GunsTab:CreateLabel("SPECIAL")
-GunsTab:CreateButton({Name="Plazma Gun (BEST)",Callback=function() local g=gunsFolder:FindFirstChild("Plazma Gun") if g then g.Parent=player.Backpack notify("Plazma Gun Added!",5) end end})
-GunsTab:CreateButton({Name="Cash Gun",Callback=function() local g=gunsFolder:FindFirstChild("Cash Gun") if g then g.Parent=player.Backpack notify("Cash Gun Added!",5) end end})
+GunsTab:CreateLabel("SPECIAL - BEST GUNS")
+GunsTab:CreateButton({Name="Christmas Gun (BEST - AUTO LOADED)",Callback=function()
+        local g=gunsFolder:FindFirstChild("Christmas Gun") if g then g.Parent=player.Backpack notify("Christmas Gun Added!",5) end
+end})
+GunsTab:CreateButton({Name="Plazma Gun",Callback=function()
+        local g=gunsFolder:FindFirstChild("Plazma Gun") if g then g.Parent=player.Backpack notify("Plazma Gun Added!",5) end
+end})
+GunsTab:CreateButton({Name="Cash Gun",Callback=function()
+        local g=gunsFolder:FindFirstChild("Cash Gun") if g then g.Parent=player.Backpack notify("Cash Gun Added!",5) end
+end})
 
 GunsTab:CreateLabel("OTHERS")
 for _,n in ipairs(gunNames) do
-    if n~="Plazma Gun" and n~="Cash Gun" then
+    if not (n=="Christmas Gun" or n=="Plazma Gun" or n=="Cash Gun") then
         GunsTab:CreateButton({Name=n,Callback=function()
                 local g=gunsFolder:FindFirstChild(n)
                 if g then g.Parent=player.Backpack notify(n.." Added!",3) end
@@ -197,7 +203,7 @@ for _,n in ipairs(gunNames) do
     end
 end
 
--- ================== ESP SYSTEM (TOGGLEABLE + MYTHICAL RED GLOW) ==================
+-- ================== ESP SYSTEM (FULL & UNTOUCHED) ==================
 local ESP_ENABLED = false
 
 local HIGH_TIER = {["Legendary"]=true,["Mythic"]=true,["Mythical"]=true,["Brainrot God"]=true,["Secret"]=true}
@@ -340,7 +346,7 @@ ESPTab:CreateToggle({
     end
 })
 
--- ================== MISC TAB ==================
+-- ================== MISC TAB (100% SAME AS BEFORE) ==================
 MiscTab:CreateButton({Name="Hop Server",Callback=function()
         notify("Hopping server...",4)
         local s = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
@@ -367,7 +373,7 @@ MiscTab:CreateButton({Name="Rejoin Server",Callback=function()
         TeleportService:Teleport(game.PlaceId, LocalPlayer)
 end})
 
--- ================== EVENTS ==================
+-- ================== BRAINROT GOD DETECTION ==================
 NPCsFolder.ChildAdded:Connect(function(npc)
     task.wait(0.3)
     if npc:IsA("Model") and isBrainrotGod(npc.Name) and not focusBrainrot then
@@ -375,6 +381,17 @@ NPCsFolder.ChildAdded:Connect(function(npc)
     end
 end)
 
+-- ================== AUTO-LOAD CHRISTMAS GUN ON JOIN ==================
+task.spawn(function()
+    task.wait(3)
+    local christmas = gunsFolder:FindFirstChild("Christmas Gun")
+    if christmas then
+        christmas.Parent = player.Backpack
+        notify("Christmas Gun Auto-Loaded! (New Best Gun)",8)
+    end
+end)
+
+-- ================== CHARACTER RESPAWN FIXES ==================
 LocalPlayer.CharacterAdded:Connect(function()
     task.wait(3)
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
@@ -390,12 +407,7 @@ task.spawn(function()
     end)
 end)
 
-task.spawn(function()
-    task.wait(2)
-    local p = gunsFolder:FindFirstChild("Plazma Gun")
-    if p then p.Parent = player.Backpack notify("Plazma Gun Auto-Added!",6) end
-end)
-
+-- ================== ANTI AFK ==================
 LocalPlayer.Idled:Connect(function()
     VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
     task.wait(1)
