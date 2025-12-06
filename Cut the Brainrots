@@ -1,0 +1,324 @@
+local Players = game:GetService("Players")
+local VirtualUser = game:GetService("VirtualUser")
+local TeleportService = game:GetService("TeleportService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local LocalPlayer = Players.LocalPlayer
+
+-- Permanent Anti-AFK
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+end)
+
+-- Load Zaporium UI Library
+local Library = loadstring(game:HttpGet('https://raw.githubusercontent.com/cheyt2025-cyber/HAYS-AI/refs/heads/main/ZAPORIUM'))()
+
+-- Main Window
+local Window = Library.CreateWindow({
+    Name = "ZAPORIUM",
+    LoadingTitle = "Zaporium",
+    ConfigurationSaving = {Enabled = false},
+    AccentColor = Color3.fromRGB(0, 212, 255),
+    Logo = "rbxassetid://112586636995159",
+    Credit = "Created by ScriptZap",
+    EnableBooting = true
+})
+
+-- 1. Info Tab (unchanged)
+local InfoTab = Window:CreateTab("Info")
+InfoTab:CreateLabel("Welcome to ZAPORIUM!")
+InfoTab:CreateLabel("Thank you so much for using my script! ❤️")
+InfoTab:CreateLabel("Made with love • Fassion")
+InfoTab:CreateLabel("I hope you enjoy every second using it!")
+InfoTab:CreateLabel("Your support keeps me going! Rocket")
+InfoTab:CreateLabel("")
+InfoTab:CreateLabel("~ ScriptZap")
+InfoTab:CreateLabel("ZAPORIUM • Simple, Clean, Powerful")
+
+InfoTab:CreateButton({
+    Name = "Join Discord Server",
+    Callback = function()
+        setclipboard("https://discord.gg/FCwb52g5")
+        Window:Notify("Discord link copied to clipboard!", 4)
+    end
+})
+
+-- 2. Farm Tab - Now with Instant Heal Toggle + ESP Brainrot
+local FarmTab = Window:CreateTab("Farm")
+
+local healLoop = nil
+local healEnabled = false
+
+FarmTab:CreateToggle({
+    Name = "Instant Heal",
+    Default = false,
+    Callback = function(state)
+        healEnabled = state
+
+        if healEnabled then
+            Window:Notify("Instant Heal ON", 3)
+            healLoop = task.spawn(function()
+                while healEnabled do
+                    pcall(function()
+                        ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Field"):WaitForChild("SafeZone"):FireServer()
+                    end)
+                    task.wait(0.5) -- loops every 0.5 seconds
+                end
+            end)
+        else
+            Window:Notify("Instant Heal OFF", 3)
+            if healLoop then
+                task.cancel(healLoop)
+                healLoop = nil
+            end
+        end
+    end
+})
+
+FarmTab:CreateLabel("Instant Heal = Spam SafeZone remote every 0.5s")
+
+-- ═══════════════════════════════════════════════════════════
+-- NEW TOGGLE: ESP Brainrot (High Rarity Visibility)
+-- ═══════════════════════════════════════════════════════════
+
+local espBrainrotEnabled = false
+local espLoop = nil
+local customGuis = {}
+
+local highRarities = {"Legendary", "Mythic", "Brainrot God", "Secret", "Extinct"}
+
+local function getRarity(npc)
+    local overhead = npc:FindFirstChild("OverheadAttachment", true)
+    if not overhead then return nil end
+    
+    local charInfo = overhead:FindFirstChild("CharacterInfo", true)
+    if not charInfo then return nil end
+    
+    local frame = charInfo:FindFirstChild("Frame", true)
+    if not frame then return nil end
+    
+    local rarityLabel = frame:FindFirstChild("Rarity")
+    if not rarityLabel then return nil end
+    
+    local text = rarityLabel.Text
+    if table.find(highRarities, text) then
+        return text
+    end
+    
+    return nil
+end
+
+local function createCustomRarityGui(npc, rarityText)
+    local head = npc:FindFirstChild("Head") or npc.PrimaryPart or npc:FindFirstChildWhichIsA("BasePart")
+    if not head then return end
+    
+    local bgui = Instance.new("BillboardGui")
+    bgui.Name = "CustomRarityGui"
+    bgui.Adornee = head
+    bgui.Size = UDim2.new(0, 500, 0, 150)
+    bgui.StudsOffset = Vector3.new(0, 6, 0)
+    bgui.MaxDistance = math.huge
+    bgui.LightInfluence = 0
+    bgui.Parent = npc
+    
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 1, 0)
+    frame.BackgroundTransparency = 1
+    frame.Parent = bgui
+    
+    local originalPath = npc:FindFirstChild("OverheadAttachment", true)
+        .CharacterInfo.Frame.Rarity
+    local clone = originalPath:Clone()
+    clone.Name = "RarityClone"
+    clone.Size = UDim2.new(1, 0, 1, 0)
+    clone.Position = UDim2.new(0.5, 0, 0.5, -25)
+    clone.TextSize = 50
+    clone.TextTransparency = 0
+    clone.TextStrokeTransparency = 0
+    clone.ZIndex = 10
+    clone.Parent = frame
+    
+    -- Pulse effect
+    local TweenService = game:GetService("TweenService")
+    local pulseTween = TweenService:Create(clone, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {Size = UDim2.new(1.1, 0, 1.1, 0)})
+    pulseTween:Play()
+    
+    -- Auto cleanup
+    local conn
+    conn = npc.AncestryChanged:Connect(function()
+        if not npc.Parent then
+            if bgui then bgui:Destroy() end
+            customGuis[npc] = nil
+            if conn then conn:Disconnect() end
+        end
+    end)
+    
+    customGuis[npc] = bgui
+    warn("HIGH RARITY SPOTTED & ENHANCED: " .. npc.Name .. " (" .. rarityText .. ")")
+end
+
+local function scanAndEnhance()
+    if not espBrainrotEnabled then return end
+    local npcsFolder = workspace.Map.Zones.Field:FindFirstChild("NPC")
+    if not npcsFolder then return end
+    
+    for _, npc in ipairs(npcsFolder:GetChildren()) do
+        if npc:IsA("Model") and not npc:FindFirstChild("CustomRarityGui") then
+            local rarity = getRarity(npc)
+            if rarity then
+                createCustomRarityGui(npc, rarity)
+            end
+        end
+    end
+end
+
+FarmTab:CreateToggle({
+    Name = "ESP Brainrot",
+    Default = false,
+    Callback = function(state)
+        espBrainrotEnabled = state
+        
+        if espBrainrotEnabled then
+            Window:Notify("ESP Brainrot Activated!", 4)
+            
+            -- Initial scan
+            scanAndEnhance()
+            
+            -- Continuous scanning
+            espLoop = task.spawn(function()
+                while espBrainrotEnabled do
+                    scanAndEnhance()
+                    task.wait(1.5)
+                end
+            end)
+        else
+            Window:Notify("ESP Brainrot Deactivated", 3)
+            
+            -- Cancel loop
+            if espLoop then
+                task.cancel(espLoop)
+                espLoop = nil
+            end
+            
+            -- Remove all custom GUIs
+            for npc, gui in pairs(customGuis) do
+                if gui and gui.Parent then
+                    gui:Destroy()
+                end
+            end
+            customGuis = {}
+        end
+    end
+})
+
+FarmTab:CreateLabel("Makes Legendary+ units have HUGE glowing labels visible from space")
+
+-- 3. Chainsaw Tab (unchanged from previous version)
+local ChainsawTab = Window:CreateTab("Chainsaw")
+
+local chainsawsToGive = {
+    "67 Chainsaw",
+    "Advanced Chainsaw",
+    "Alien Chainsaw",
+    "Basic Chainsaw",
+    "Blood Moon Chainsaw",
+    "Candy Chainsaw",
+    "Dark Matter Chainsaw",
+    "Electric Chainsaw",
+    "Elite Chainsaw",
+    "Flame Chainsaw",
+    "Heavy Chainsaw",
+    "Ice Chainsaw",
+    "Improved Chainsaw",
+}
+
+local function giveChainsaw(name)
+    local folder = ReplicatedStorage:WaitForChild("Assets"):WaitForChild("Chainsaws")
+    local tool = folder:FindFirstChild(name)
+    if tool and tool:IsA("Tool") then
+        tool.Parent = LocalPlayer:WaitForChild("Backpack")
+        Window:Notify("Gave " .. name, 3)
+    else
+        Window:Notify("Not found: " .. name, 4)
+    end
+end
+
+local function giveAllChainsaws()
+    local folder = ReplicatedStorage:WaitForChild("Assets"):WaitForChild("Chainsaws")
+    local count = 0
+    for _, name in ipairs(chainsawsToGive) do
+        local tool = folder:FindFirstChild(name)
+        if tool and tool:IsA("Tool") then
+            tool.Parent = LocalPlayer:WaitForChild("Backpack")
+            count += 1
+        end
+    end
+    Window:Notify("Gave " .. count .. " chainsaws!", 5)
+end
+
+ChainsawTab:CreateButton({
+    Name = "Get All Chainsaws",
+    Callback = giveAllChainsaws
+})
+
+ChainsawTab:CreateLabel("Or get individually:")
+for _, name in ipairs(chainsawsToGive) do
+    ChainsawTab:CreateButton({
+        Name = name,
+        Callback = function() giveChainsaw(name) end
+    })
+end
+
+-- 4. Misc Tab (100% unchanged)
+local MiscTab = Window:CreateTab("Misc")
+
+MiscTab:CreateButton({
+    Name = "Hop Server",
+    Callback = function()
+        Window:Notify("Hopping to a new server...", 3)
+        local servers = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
+        local available = {}
+        for _, v in pairs(servers.data) do
+            if v.playing < v.maxPlayers and v.id ~= game.JobId then
+                table.insert(available, v.id)
+            end
+        end
+        if #available > 0 then
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, available[math.random(1, #available)], LocalPlayer)
+        else
+            Window:Notify("No available servers found!", 4)
+        end
+    end
+})
+
+MiscTab:CreateSlider({
+    Name = "WalkSpeed",
+    Min = 16,
+    Max = 300,
+    Default = 16,
+    Callback = function(value)
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = value
+        end
+        LocalPlayer.CharacterAdded:Connect(function(char)
+            task.wait()
+            if char:FindFirstChild("Humanoid") then
+                char.Humanoid.WalkSpeed = value
+            end
+        end)
+    end
+})
+
+MiscTab:CreateButton({
+    Name = "Rejoin Server",
+    Callback = function()
+        Window:Notify("Rejoining server...", 3)
+        task.wait(0.3)
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end
+})
+
+-- Loaded Notification
+Window:Notify("ZAPORIUM Loaded • Anti-AFK ON", 6)
