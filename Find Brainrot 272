@@ -1,0 +1,153 @@
+local Players = game:GetService("Players")
+local VirtualUser = game:GetService("VirtualUser")
+local TeleportService = game:GetService("TeleportService")
+local LocalPlayer = Players.LocalPlayer
+
+-- Permanent Anti-AFK
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+end)
+
+-- Load Zaporium UI Library
+local Library = loadstring(game:HttpGet('https://raw.githubusercontent.com/cheyt2025-cyber/HAYS-AI/refs/heads/main/ZAPORIUM'))()
+
+-- Main Window
+local Window = Library.CreateWindow({
+    Name = "ZAPORIUM",
+    LoadingTitle = "Zaporium",
+    ConfigurationSaving = {Enabled = false},
+    AccentColor = Color3.fromRGB(0, 212, 255),
+    Logo = "rbxassetid://112586636995159",
+    Credit = "Created by ScriptZap",
+    EnableBooting = true
+})
+
+-- Info Tab
+local InfoTab = Window:CreateTab("Info")
+InfoTab:CreateLabel("Welcome to ZAPORIUM!")
+InfoTab:CreateLabel("Thank you so much for using my script! <3")
+InfoTab:CreateLabel("Made with love • Fassion")
+InfoTab:CreateLabel("I hope you enjoy every second using it!")
+InfoTab:CreateLabel("Your support keeps me going!")
+InfoTab:CreateLabel("")
+InfoTab:CreateLabel("~ ScriptZap")
+InfoTab:CreateLabel("ZAPORIUM • Simple, Clean, Powerful")
+
+InfoTab:CreateButton({
+    Name = "Join Discord Server",
+    Callback = function()
+        setclipboard("https://discord.gg/FCwb52g5")
+        Window:Notify("Discord link copied to clipboard!", 4)
+    end
+})
+
+-- NEW FARM TAB (position 2)
+local FarmTab = Window:CreateTab("Farm")
+
+local autoFindEnabled = false
+local farmLoop
+
+FarmTab:CreateToggle({
+    Name = "Auto Find",
+    Default = false,
+    Callback = function(value)
+        autoFindEnabled = value
+
+        if autoFindEnabled then
+            Window:Notify("Auto Find ENABLED", 4)
+
+            farmLoop = task.spawn(function()
+                while autoFindEnabled do
+                    pcall(function()
+                        local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+                        local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+                        local folder = workspace:FindFirstChild("Brainrots")
+
+                        if folder and humanoidRootPart then
+                            for _, part in ipairs(folder:GetChildren()) do
+                                if not autoFindEnabled then break end
+                                if part:IsA("BasePart") then
+                                    humanoidRootPart.CFrame = part.CFrame
+                                    task.wait(1) -- your original delay
+                                end
+                            end
+                        end
+                    end)
+                    task.wait() -- tiny wait so it doesn't error-spam if something goes wrong
+                end
+            end)
+
+        else
+            Window:Notify("Auto Find DISABLED", 4)
+            if farmLoop then
+                task.cancel(farmLoop)
+                farmLoop = nil
+            end
+        end
+    end
+})
+
+-- Auto-restart Auto Find when you respawn (so it never stops)
+LocalPlayer.CharacterAdded:Connect(function()
+    if autoFindEnabled then
+        -- Just toggle it off and back on so it restarts cleanly with the new character
+        autoFindEnabled = false
+        task.wait(0.5)
+        autoFindEnabled = true
+        -- Trigger the same code again
+        FarmTab:CreateToggle({Name = "Auto Find", Default = false, Callback = function(v) end})(true)
+    end
+end)
+
+-- Misc Tab (position 3)
+local MiscTab = Window:CreateTab("Misc")
+
+MiscTab:CreateButton({
+    Name = "Hop Server",
+    Callback = function()
+        Window:Notify("Hopping to a new server...", 3)
+        local servers = game.HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
+        local available = {}
+        for _, v in pairs(servers.data) do
+            if v.playing < v.maxPlayers and v.id ~= game.JobId then
+                table.insert(available, v.id)
+            end
+        end
+        if #available > 0 then
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, available[math.random(1, #available)], LocalPlayer)
+        else
+            Window:Notify("No available servers found!", 4)
+        end
+    end
+})
+
+MiscTab:CreateSlider({
+    Name = "WalkSpeed",
+    Min = 16,
+    Max = 300,
+    Default = 16,
+    Callback = function(value)
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = value
+        end
+        LocalPlayer.CharacterAdded:Connect(function(char)
+            task.wait()
+            if char:FindFirstChild("Humanoid") then
+                char.Humanoid.WalkSpeed = value
+            end
+        end)
+    end
+})
+
+MiscTab:CreateButton({
+    Name = "Rejoin Server",
+    Callback = function()
+        Window:Notify("Rejoining server...", 3)
+        task.wait(0.3)
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end
+})
+
+Window:Notify("ZAPORIUM Loaded • Anti-AFK ON", 6)
