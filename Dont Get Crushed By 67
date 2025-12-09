@@ -1,0 +1,331 @@
+local Players = game:GetService("Players")
+local VirtualUser = game:GetService("VirtualUser")
+local TeleportService = game:GetService("TeleportService")
+local LocalPlayer = Players.LocalPlayer
+
+-- Permanent Anti-AFK (Always ON - Cannot be disabled)
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+end)
+
+-- Load Zaporium UI Library
+local Library = loadstring(game:HttpGet('https://raw.githubusercontent.com/cheyt2025-cyber/HAYS-AI/refs/heads/main/ZAPORIUM'))()
+
+-- Main Window
+local Window = Library.CreateWindow({
+    Name = "ZAPORIUM",
+    LoadingTitle = "Zaporium",
+    ConfigurationSaving = {Enabled = false},
+    AccentColor = Color3.fromRGB(0, 212, 255),
+    Logo = "rbxassetid://112586636995159",
+    Credit = "Created by ScriptZap",
+    EnableBooting = true
+})
+
+-- Info Tab
+local InfoTab = Window:CreateTab("Info")
+
+InfoTab:CreateLabel("Welcome to ZAPORIUM! ✨")
+InfoTab:CreateLabel("Thank you so much for using my script! ❤️")
+InfoTab:CreateLabel("Made with love • Fassion")
+InfoTab:CreateLabel("I hope you enjoy every second using it!")
+InfoTab:CreateLabel("Your support keeps me going! 🚀")
+InfoTab:CreateLabel("")
+InfoTab:CreateLabel("~ ScriptZap")
+InfoTab:CreateLabel("ZAPORIUM • Simple, Clean, Powerful")
+
+InfoTab:CreateButton({
+    Name = "📋 Join Discord Server",
+    Callback = function()
+        setclipboard("https://discord.gg/FCwb52g5")
+        Window:Notify("Discord link copied to clipboard! 🎉", 4)
+    end
+})
+
+-- Farm Tab
+local FarmTab = Window:CreateTab("Farm")
+
+-- Helper function for teleport and free fall
+local function teleportAndFall(character, part)
+    local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+    humanoidRootPart.CFrame = CFrame.new(part.Position + Vector3.new(0, 10, 0))
+    humanoidRootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+    humanoidRootPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+
+    local startY = humanoidRootPart.Position.Y
+    repeat
+        task.wait(0.1)
+    until humanoidRootPart.Position.Y <= startY - 8
+
+    task.wait(0.5)
+end
+
+-- Finish Starter World Button
+FarmTab:CreateButton({
+    Name = "Finish Starter World",
+    Callback = function()
+        local player = Players.LocalPlayer
+        local character = player.Character or player.CharacterAdded:Wait()
+        local holes = {}
+        for i = 1, 7 do
+            table.insert(holes, workspace.Worlds.Starter.Nodes.Holes[tostring(i)])
+        end
+        for _, hole in ipairs(holes) do
+            teleportAndFall(character, hole)
+        end
+        teleportAndFall(character, workspace.Worlds.Starter.Nodes.Win)
+        print("Starter sequence complete! You made it to Win! 🎉")
+    end
+})
+
+-- Finish Toxic World Button
+FarmTab:CreateButton({
+    Name = "Finish Toxic World",
+    Callback = function()
+        local player = Players.LocalPlayer
+        local character = player.Character or player.CharacterAdded:Wait()
+        local holes = {}
+        for i = 1, 5 do
+            table.insert(holes, workspace.Worlds.Toxic.Nodes.Holes[tostring(i)])
+        end
+        for _, hole in ipairs(holes) do
+            teleportAndFall(character, hole)
+        end
+        teleportAndFall(character, workspace.Worlds.Toxic.Nodes.Win)
+        print("Toxic sequence complete! You made it to Win! 🎉")
+    end
+})
+
+-- Finish Fire World Button
+FarmTab:CreateButton({
+    Name = "Finish Fire World",
+    Callback = function()
+        local player = Players.LocalPlayer
+        local character = player.Character or player.CharacterAdded:Wait()
+        local holes = {}
+        for i = 1, 6 do
+            table.insert(holes, workspace.Worlds.Fire.Nodes.Holes[tostring(i)])
+        end
+        for _, hole in ipairs(holes) do
+            teleportAndFall(character, hole)
+        end
+        teleportAndFall(character, workspace.Worlds.Fire.Nodes.Win)
+        print("Fire sequence complete! You made it to Win! 🎉")
+    end
+})
+
+-- Unlock Dark Flash Button
+FarmTab:CreateButton({
+    Name = "Unlock Dark Flash",
+    Callback = function()
+        local rig = workspace["lobby stuff"]["Gamepass Pads"].DarkFlashSpeed.Rig
+        local plr = game.Players.LocalPlayer
+
+        if plr.Character then
+            plr.Character:Destroy()
+        end
+
+        local newchar = rig:Clone()
+        newchar.Name = plr.Name
+        newchar.Parent = workspace
+
+        plr.Character = newchar
+
+        local hum = newchar:WaitForChild("Humanoid")
+        local root = newchar:WaitForChild("HumanoidRootPart")
+
+        for _, v in newchar:GetDescendants() do
+            if v:IsA("BasePart") then
+                v.Anchored = false
+            elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then
+                v.Enabled = true
+            end
+        end
+
+        if newchar:FindFirstChild("BillboardGui") then
+            newchar.BillboardGui:Destroy()
+        end
+
+        hum.PlatformStand = false
+        hum.Sit = false
+        hum.WalkSpeed = 120
+        hum.JumpPower = 50
+
+        workspace.CurrentCamera.CameraSubject = hum
+
+        local animate = rig:FindFirstChild("Animate")
+        if animate then
+            animate:Clone().Parent = newchar
+        end
+
+        plr:LoadCharacter()
+    end
+})
+
+---------------------------------------------------------------------
+-- Unlock OP Flash Button (UPDATED BULLETPROOF VERSION)
+---------------------------------------------------------------------
+FarmTab:CreateButton({
+    Name = "Unlock OP Flash",
+    Callback = function()
+
+        local Players = game:GetService("Players")
+        local RunService = game:GetService("RunService")
+        local player = Players.LocalPlayer
+
+        local currentFake = nil
+        local currentAlignConn = nil
+
+        local function cleanup()
+            if currentFake then
+                currentFake:Destroy()
+                currentFake = nil
+            end
+            if currentAlignConn then
+                currentAlignConn:Disconnect()
+                currentAlignConn = nil
+            end
+        end
+
+        local function applyFlashVisuals()
+            cleanup()
+
+            local character = player.Character
+            if not character then return end
+            
+            local humanoid = character:WaitForChild("Humanoid")
+
+            humanoid.WalkSpeed = 120
+            humanoid.JumpHeight = 50
+
+            local sourceRig = workspace["lobby stuff"]["Gamepass Pads"].FlashSpeed.Rig
+            currentFake = sourceRig:Clone()
+            currentFake.Name = "FlashVisuals_" .. player.Name
+            currentFake.PrimaryPart = currentFake.HumanoidRootPart
+            currentFake.Parent = workspace
+
+            if currentFake:FindFirstChild("BillboardGui") then 
+                currentFake.BillboardGui:Destroy() 
+            end
+            if currentFake.HumanoidRootPart:FindFirstChild("My Ordinary Life (pitch 0.14)") then 
+                currentFake.HumanoidRootPart["My Ordinary Life (pitch 0.14)"]:Destroy() 
+            end
+
+            local fakeRoot = currentFake.HumanoidRootPart
+            fakeRoot.Transparency = 1
+            fakeRoot.CanCollide = false
+            fakeRoot.Anchored = false
+            
+            local fakeHumanoid = currentFake:WaitForChild("Humanoid")
+            fakeHumanoid.PlatformStand = true
+            fakeHumanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+
+            for _, obj in pairs(character:GetDescendants()) do
+                if obj:IsA("BasePart") then
+                    obj.Transparency = 1
+                elseif obj:IsA("Decal") or obj:IsA("Texture") then
+                    obj.Transparency = 1
+                elseif obj:IsA("Accessory") and obj:FindFirstChild("Handle") then
+                    obj.Handle.Transparency = 1
+                end
+            end
+
+            local head = character:FindFirstChild("Head")
+            if head and head:FindFirstChild("face") then
+                head.face.Transparency = 1
+            end
+
+            workspace.CurrentCamera.CameraSubject = fakeHumanoid
+
+            local HEIGHT_OFFSET = Vector3.new(0, 0.9, 0)
+            currentAlignConn = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    local realRoot = character:FindFirstChild("HumanoidRootPart")
+                    if realRoot and currentFake and currentFake.Parent and currentFake.PrimaryPart and currentFake.PrimaryPart.Parent then
+                        currentFake:SetPrimaryPartCFrame(realRoot.CFrame + HEIGHT_OFFSET)
+                    end
+                end)
+            end)
+
+            task.spawn(function()
+                while true do
+                    task.wait(2)
+                    if not (currentFake and currentFake.Parent) then
+                        print("⚡ Flash visuals lost - AUTO RECREATING! ⚡")
+                        cleanup()
+                        applyFlashVisuals()
+                    end
+                end
+            end)
+
+            print("⚡ FlashSpeed 120x LOADED | ELECTRIC | NO SINKING | AUTO-FIX BUGGY DESPAWNS ⚡")
+        end
+
+        local function onCharacterAdded(newChar)
+            task.wait(2)
+            applyFlashVisuals()
+        end
+
+        if player.Character then
+            onCharacterAdded(player.Character)
+        end
+        
+        player.CharacterAdded:Connect(onCharacterAdded)
+
+    end
+})
+---------------------------------------------------------------------
+
+-- Misc Tab
+local MiscTab = Window:CreateTab("Misc")
+
+MiscTab:CreateButton({
+    Name = "Hop Server",
+    Callback = function()
+        Window:Notify("Hopping to a new server...", 3)
+        local servers = game.HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
+        local available = {}
+        for _, v in pairs(servers.data) do
+            if v.playing < v.maxPlayers and v.id ~= game.JobId then
+                table.insert(available, v.id)
+            end
+        end
+        if #available > 0 then
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, available[math.random(1, #available)], LocalPlayer)
+        else
+            Window:Notify("No available servers found!", 4)
+        end
+    end
+})
+
+MiscTab:CreateSlider({
+    Name = "WalkSpeed",
+    Min = 16,
+    Max = 300,
+    Default = 16,
+    Callback = function(value)
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = value
+        end
+        LocalPlayer.CharacterAdded:Connect(function(char)
+            task.wait()
+            if char:FindFirstChild("Humanoid") then
+                char.Humanoid.WalkSpeed = value
+            end
+        end)
+    end
+})
+
+MiscTab:CreateButton({
+    Name = "Rejoin Server",
+    Callback = function()
+        Window:Notify("Rejoining server...", 3)
+        task.wait(0.3)
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end
+})
+
+-- Success Notification
+Window:Notify("ZAPORIUM Loaded • Anti-AFK ON", 6)
