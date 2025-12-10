@@ -1,22 +1,20 @@
--- ZAPORIUM GUI - CLEAN INSTANT AUTO FARM
--- Only Legendary / Mythic / God / Secret with individual toggles
+-- ZAPORIUM GUI - Just making it for fun
 
 local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
 
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 local charactersFolder = workspace:WaitForChild("Essentials"):WaitForChild("Characters")
-local safePos = Vector3.new(167.18, 18.88, -170.96)
+local safeCFrame = CFrame.new(167.18, 18.88, -170.96)
 
 -- GUI
 local Window = library:CreateWindow("Jail a Brainrot")
 local Main = Window:AddFolder("Auto Farm")
 
--- Individual Auto Toggles
-Main:AddToggle({text = "Auto Legendary",  flag = "AutoLegendary",  state = false})
-Main:AddToggle({text = "Auto Mythic",     flag = "AutoMythic",     state = false})
-Main:AddToggle({text = "Auto God",        flag = "AutoGod",        state = false})
-Main:AddToggle({text = "Auto Secret",     flag = "AutoSecret",     state = false})
+Main:AddToggle({text = "Auto Legendary", flag = "AutoLegendary", state = false})
+Main:AddToggle({text = "Auto Mythic",    flag = "AutoMythic",    state = false})
+Main:AddToggle({text = "Auto God",       flag = "AutoGod",       state = false})
+Main:AddToggle({text = "Auto Secret",    flag = "AutoSecret",    state = false})
 
 Main:AddSlider({
     text = "WalkSpeed",
@@ -30,83 +28,83 @@ Main:AddSlider({
 })
 
 Main:AddLabel({text = "YT: ScriptZap0"})
-
 library:Init()
 
--- Persist WalkSpeed on respawn
+-- WalkSpeed persist
 player.CharacterAdded:Connect(function(char)
     char:WaitForChild("Humanoid").WalkSpeed = library.flags.walkspeed
 end)
 
--- Rarity detection
-local function getRarityText(folder)
-    local paths = {
-        folder:FindFirstChild("NPCHead"),
-        folder:FindFirstChild("Head") and folder.Head:FindFirstChild("NPCHead")
-    }
-    for _, npcHead in pairs(paths) do
-        if npcHead then
-            local label = npcHead:FindFirstChild("Rarity")
-            if label and label:IsA("TextLabel") then
-                return label.Text
-            end
-        end
-    end
-    return nil
-end
+-- Rarity check
+local function shouldFarm(folder)
+    local npcHead = folder:FindFirstChild("NPCHead") or (folder:FindFirstChild("Head") and folder.Head:FindFirstChild("NPCHead"))
+    if not npcHead then return false end
+    local label = npcHead:FindFirstChild("Rarity")
+    if not label or not label:IsA("TextLabel") then return false end
 
-local function shouldFarm(rarityText)
-    if not rarityText then return false end
-    local clean = rarityText:lower():gsub("%s+", "")
-    if clean:find("legendary")  and library.flags.AutoLegendary then return true end
-    if clean:find("mythic")     and library.flags.AutoMythic    then return true end
-    if clean:find("god")        and library.flags.AutoGod       then return true end
-    if clean:find("secret")     and library.flags.AutoSecret    then return true end
+    local r = label.Text:lower():gsub("%s+", "")
+    if r == "legendary" and library.flags.AutoLegendary then return true end
+    if r == "mythic"    and library.flags.AutoMythic    then return true end
+    if r == "god"       and library.flags.AutoGod       then return true end
+    if r == "secret"    and library.flags.AutoSecret    then return true end
     return false
 end
 
--- Instant steal function
-local function instantSteal(target)
-    local prompt = target:FindFirstChild("HumanoidRootPart") and target.HumanoidRootPart:FindFirstChild("Steal")
-    if prompt and prompt:IsA("ProximityPrompt") then
-        prompt.HoldDuration = 0
-        fireproximityprompt(prompt)
-        task.spawn(function() task.wait(0.05) fireproximityprompt(prompt) end)
-    end
+-- SUPER FAST & RELIABLE trigger
+local function stealAndReturn(target)
+    local hrp = target:FindFirstChild("HumanoidRootPart")
+    local prompt = hrp and hrp:FindFirstChild("Steal")
+    if not prompt then return end
+
+    -- Prep
+    prompt.MaxActivationDistance = 30
+    prompt.RequiresLineOfSight = false
+
+    -- Hold exactly 1 second
+    prompt:InputHoldBegin()
+    task.wait(1.05)        -- 1 second hold + tiny buffer
+    prompt:InputHoldEnd()
+
+    -- INSTANT RETURN (no extra wait!)
+    player.Character.HumanoidRootPart.CFrame = safeCFrame
 end
 
--- Main farming loop
+-- Main loop — MAX SPEED, ZERO MISSES
 task.spawn(function()
-    while task.wait(0.25) do
-        if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then continue end
-        local hrp = player.Character.HumanoidRootPart
+    while task.wait(0.3) do
+        local myHRP = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if not myHRP then continue end
 
-        local bestTarget = nil
-        local bestDist = 99999
+        local closest = nil
+        local closestDist = 99999
 
         for _, folder in charactersFolder:GetChildren() do
-            local targetHRP = folder:FindFirstChild("HumanoidRootPart")
-            if targetHRP and shouldFarm(getRarityText(folder)) then
-                local dist = (hrp.Position - targetHRP.Position).Magnitude
-                if dist < bestDist then
-                    bestDist = dist
-                    bestTarget = folder
+            local tHRP = folder:FindFirstChild("HumanoidRootPart")
+            if tHRP and shouldFarm(folder) then
+                local dist = (myHRP.Position - tHRP.Position).Magnitude
+                if dist < closestDist then
+                    closestDist = dist
+                    closest = folder
                 end
             end
         end
 
-        if bestTarget then
-            local rarity = getRarityText(bestTarget) or "Unknown"
-            print("Auto farming →", rarity, bestTarget.Name)
+        if closest then
+            local rarity = (closest:FindFirstChild("NPCHead") or closest.Head and closest.Head:FindFirstChild("NPCHead"))
+            and (closest:FindFirstChild("Rarity", true) and closest:FindFirstChild("Rarity", true).Text or "???")
 
-            hrp.CFrame = bestTarget.HumanoidRootPart.CFrame * CFrame.new(0, 0, -4)
-            task.wait(0.05)
-            instantSteal(bestTarget)
-            task.wait(0.1)
-            hrp.CFrame = CFrame.new(safePos)
-            task.wait(0.3)
+            print("Farming →", rarity, closest.Name)
+
+            -- TP in front
+            myHRP.CFrame = closest.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
+            task.wait(0.25)  -- Only wait needed for stability
+
+            -- Steal + instant back
+            stealAndReturn(closest)
+
+            task.wait(0.3)  -- Tiny cooldown before next NPC
         end
     end
 end)
 
-print("Zaporium Auto Farm Loaded!")
+print("FASTEST RELIABLE AUTO FARM LOADED!")
