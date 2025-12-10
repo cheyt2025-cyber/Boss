@@ -1,0 +1,112 @@
+-- ZAPORIUM GUI - CLEAN INSTANT AUTO FARM
+-- Only Legendary / Mythic / God / Secret with individual toggles
+
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local charactersFolder = workspace:WaitForChild("Essentials"):WaitForChild("Characters")
+local safePos = Vector3.new(167.18, 18.88, -170.96)
+
+-- GUI
+local Window = library:CreateWindow("Jail a Brainrot")
+local Main = Window:AddFolder("Auto Farm")
+
+-- Individual Auto Toggles
+Main:AddToggle({text = "Auto Legendary",  flag = "AutoLegendary",  state = false})
+Main:AddToggle({text = "Auto Mythic",     flag = "AutoMythic",     state = false})
+Main:AddToggle({text = "Auto God",        flag = "AutoGod",        state = false})
+Main:AddToggle({text = "Auto Secret",     flag = "AutoSecret",     state = false})
+
+Main:AddSlider({
+    text = "WalkSpeed",
+    min = 16, max = 300, value = 16,
+    flag = "walkspeed",
+    callback = function(v)
+        if player.Character and player.Character:FindFirstChild("Humanoid") then
+            player.Character.Humanoid.WalkSpeed = v
+        end
+    end
+})
+
+Main:AddLabel({text = "YT: ScriptZap0"})
+
+library:Init()
+
+-- Persist WalkSpeed on respawn
+player.CharacterAdded:Connect(function(char)
+    char:WaitForChild("Humanoid").WalkSpeed = library.flags.walkspeed
+end)
+
+-- Rarity detection
+local function getRarityText(folder)
+    local paths = {
+        folder:FindFirstChild("NPCHead"),
+        folder:FindFirstChild("Head") and folder.Head:FindFirstChild("NPCHead")
+    }
+    for _, npcHead in pairs(paths) do
+        if npcHead then
+            local label = npcHead:FindFirstChild("Rarity")
+            if label and label:IsA("TextLabel") then
+                return label.Text
+            end
+        end
+    end
+    return nil
+end
+
+local function shouldFarm(rarityText)
+    if not rarityText then return false end
+    local clean = rarityText:lower():gsub("%s+", "")
+    if clean:find("legendary")  and library.flags.AutoLegendary then return true end
+    if clean:find("mythic")     and library.flags.AutoMythic    then return true end
+    if clean:find("god")        and library.flags.AutoGod       then return true end
+    if clean:find("secret")     and library.flags.AutoSecret    then return true end
+    return false
+end
+
+-- Instant steal function
+local function instantSteal(target)
+    local prompt = target:FindFirstChild("HumanoidRootPart") and target.HumanoidRootPart:FindFirstChild("Steal")
+    if prompt and prompt:IsA("ProximityPrompt") then
+        prompt.HoldDuration = 0
+        fireproximityprompt(prompt)
+        task.spawn(function() task.wait(0.05) fireproximityprompt(prompt) end)
+    end
+end
+
+-- Main farming loop
+task.spawn(function()
+    while task.wait(0.25) do
+        if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then continue end
+        local hrp = player.Character.HumanoidRootPart
+
+        local bestTarget = nil
+        local bestDist = 99999
+
+        for _, folder in charactersFolder:GetChildren() do
+            local targetHRP = folder:FindFirstChild("HumanoidRootPart")
+            if targetHRP and shouldFarm(getRarityText(folder)) then
+                local dist = (hrp.Position - targetHRP.Position).Magnitude
+                if dist < bestDist then
+                    bestDist = dist
+                    bestTarget = folder
+                end
+            end
+        end
+
+        if bestTarget then
+            local rarity = getRarityText(bestTarget) or "Unknown"
+            print("Auto farming →", rarity, bestTarget.Name)
+
+            hrp.CFrame = bestTarget.HumanoidRootPart.CFrame * CFrame.new(0, 0, -4)
+            task.wait(0.05)
+            instantSteal(bestTarget)
+            task.wait(0.1)
+            hrp.CFrame = CFrame.new(safePos)
+            task.wait(0.3)
+        end
+    end
+end)
+
+print("Zaporium Auto Farm Loaded!")
