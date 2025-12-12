@@ -1,0 +1,253 @@
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+
+-- GUI Library
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+local Window = library:CreateWindow("Baboon Tag X")
+
+-- Folder
+local Main = Window:AddFolder("Baboon Tag")
+
+-- Config
+local BABOON_COLOR = Color3.fromRGB(30, 144, 255)
+local LAVA_COLOR = Color3.fromRGB(255, 165, 0)
+local ENEMY_FILL_TRANSPARENCY = 0.3
+local FRIENDLY_FILL_TRANSPARENCY = 0.8
+local OUTLINE_TRANSPARENCY = 0
+local SPEED_BOOST = 50
+
+-- States
+local espBaboonEnabled = false
+local espLavaEnabled = false
+local autoTagEnabled = false
+
+-- Connections
+local playerHighlights = {}
+local autoTagConnection = nil
+local noclipConnection = nil
+local teamConnection = nil
+local charAddedConnection = nil
+
+-- ESP Functions
+local function createHighlight(character)
+    local highlight = Instance.new("Highlight")
+    highlight.Adornee = character
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.OutlineTransparency = OUTLINE_TRANSPARENCY
+    highlight.FillTransparency = 1
+    highlight.Parent = character
+    return highlight
+end
+
+local function updateHighlight(player)
+    if player == LocalPlayer then return end
+    local character = player.Character
+    if not character then return end
+
+    -- Cleanup old
+    if playerHighlights[player] then
+        playerHighlights[player]:Destroy()
+        playerHighlights[player] = nil
+    end
+
+    local team = player.Team
+    if not team then return end
+    local teamName = team.Name
+    if teamName ~= "Baboon" and teamName ~= "Lava" then return end
+
+    -- Check specific ESP toggles
+    if teamName == "Baboon" and not espBaboonEnabled then return end
+    if teamName == "Lava" and not espLavaEnabled then return end
+
+    -- Create new
+    local highlight = createHighlight(character)
+    playerHighlights[player] = highlight
+
+    -- Colors
+    if teamName == "Baboon" then
+        highlight.OutlineColor = BABOON_COLOR
+        highlight.FillColor = BABOON_COLOR
+    else
+        highlight.OutlineColor = LAVA_COLOR
+        highlight.FillColor = LAVA_COLOR
+    end
+
+    -- Teammate distinction
+    local isTeammate = LocalPlayer.Team and player.Team == LocalPlayer.Team
+    highlight.FillTransparency = isTeammate and FRIENDLY_FILL_TRANSPARENCY or ENEMY_FILL_TRANSPARENCY
+    highlight.Enabled = true
+end
+
+local function refreshAllESP()
+    for _, player in ipairs(Players:GetPlayers()) do
+        updateHighlight(player)
+    end
+end
+
+-- Auto-Tag Functions
+local function startAutoTag()
+    if autoTagConnection then return end
+
+    autoTagConnection = RunService.Heartbeat:Connect(function()
+        if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
+        local myHRP = LocalPlayer.Character.HumanoidRootPart
+        local oldCFrame = myHRP.CFrame
+
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Team and player.Team.Name == "Baboon" and
+            player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local targetHRP = player.Character.HumanoidRootPart
+                myHRP.CFrame = targetHRP.CFrame
+                task.wait()
+            end
+        end
+
+        myHRP.CFrame = oldCFrame
+    end)
+end
+
+local function stopAutoTag()
+    if autoTagConnection then
+        autoTagConnection:Disconnect()
+        autoTagConnection = nil
+    end
+end
+
+-- Noclip
+local function toggleNoclip(enable)
+    if noclipConnection then
+        noclipConnection:Disconnect()
+        noclipConnection = nil
+    end
+    if enable then
+        noclipConnection = RunService.Stepped:Connect(function()
+            if LocalPlayer.Character then
+                for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                    end
+                end
+            end
+        end)
+    end
+end
+
+-- Speed
+local function applySpeed()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+        LocalPlayer.Character.Humanoid.WalkSpeed = SPEED_BOOST
+    end
+end
+
+local function resetSpeed()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+        LocalPlayer.Character.Humanoid.WalkSpeed = 16
+    end
+end
+
+-- Team Check (enables full suite if Lava + AutoTag ON)
+local function checkTeam()
+    local onLava = LocalPlayer.Team and LocalPlayer.Team.Name == "Lava"
+    local shouldEnable = onLava and autoTagEnabled
+
+    if shouldEnable then
+        startAutoTag()
+        toggleNoclip(true)
+        applySpeed()
+    else
+        stopAutoTag()
+        toggleNoclip(false)
+        resetSpeed()
+    end
+end
+
+-- Player Setup
+local function setupPlayer(player)
+    if player.Character then
+        updateHighlight(player)
+    end
+    player.CharacterAdded:Connect(function()
+        task.wait(0.1)
+        updateHighlight(player)
+    end)
+    player:GetPropertyChangedSignal("Team"):Connect(function()
+        task.wait(0.1)
+        updateHighlight(player)
+    end)
+end
+
+-- GUI Toggles
+Main:AddToggle({
+    text = "ESP Baboon",
+    state = false,
+    flag = "espbaboon",
+    callback = function(v)
+        espBaboonEnabled = v
+        refreshAllESP()
+    end
+})
+
+Main:AddToggle({
+    text = "ESP Lava",
+    state = false,
+    flag = "esplava",
+    callback = function(v)
+        espLavaEnabled = v
+        refreshAllESP()
+    end
+})
+
+Main:AddToggle({
+    text = "Auto Tag Baboon",
+    state = false,
+    flag = "autotag",
+    callback = function(v)
+        autoTagEnabled = v
+        checkTeam()
+    end
+})
+
+Main:AddBind({
+    text = "Toggle GUI",
+    key = Enum.KeyCode.Insert,
+    callback = function()
+        library:Close()
+    end
+})
+Main:AddLabel({text = "YT: ScriptZap0"})
+-- Init GUI
+library:Init()
+
+-- Setup
+for _, player in ipairs(Players:GetPlayers()) do
+    setupPlayer(player)
+end
+Players.PlayerAdded:Connect(setupPlayer)
+Players.PlayerRemoving:Connect(function(player)
+    if playerHighlights[player] then
+        playerHighlights[player]:Destroy()
+        playerHighlights[player] = nil
+    end
+end)
+
+-- Team monitoring
+teamConnection = LocalPlayer:GetPropertyChangedSignal("Team"):Connect(checkTeam)
+charAddedConnection = LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.1)
+    checkTeam()
+end)
+
+-- Initial
+refreshAllESP()
+checkTeam()
+
+-- Cleanup on leave
+LocalPlayer.CharacterRemoving:Connect(function()
+    stopAutoTag()
+    toggleNoclip(false)
+    resetSpeed()
+end)
+
+print("🦍 Baboon Tag X GUI Loaded!")
+
