@@ -1,0 +1,278 @@
+-- YT: ScriptZap0
+
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+local Window = library:CreateWindow("Inv. Hide & Seek")
+
+local Main = Window:AddFolder("Main Features")
+
+-- Variables
+local collecting = false
+local espHidersEnabled = false
+local espSeekersEnabled = false
+local ESP = {} -- [player] = Highlight
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+-- ========================================
+-- LOCKS YOUR CHARACTER PERFECTLY UPRIGHT & PREVENTS FALLING/SPINNING
+-- ========================================
+local function lockCharacterUpright(char)
+    local humanoid = char:FindFirstChild("Humanoid")
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not humanoid or not root then return end
+    humanoid.PlatformStand = false
+    humanoid.Sit = false
+    humanoid:ChangeState(Enum.HumanoidStateType.Running)
+    humanoid.AutoRotate = true
+    local bv = Instance.new("BodyVelocity")
+    bv.MaxForce = Vector3.new(0, math.huge, 0)
+    bv.Velocity = Vector3.zero
+    bv.P = 3000
+    bv.Parent = root
+    local bg = Instance.new("BodyGyro")
+    bg.MaxTorque = Vector3.new(0, math.huge, 0)
+    bg.P = 20000
+    bg.D = 1500
+    bg.CFrame = CFrame.new(root.Position)
+    bg.Parent = root
+    -- Keep it locked forever while farming
+    task.spawn(function()
+        while collecting and root.Parent and humanoid.Health > 0 do
+            bg.CFrame = CFrame.new(root.Position)  -- Always perfectly upright
+            bv.Velocity = Vector3.new(0, 0, 0)     -- Cancel all gravity/falling
+            RunService.Heartbeat:Wait()
+        end
+        if bv then bv:Destroy() end
+        if bg then bg:Destroy() end
+    end)
+end
+
+-- ========================================
+-- ESP FUNCTIONS
+-- ========================================
+local function getTeam(plr)
+    if plr.Team then
+        local t = plr.Team.Name:lower()
+        if t:find("hid") then return "Hiders" end
+        if t:find("seek") then return "Seekers" end
+    end
+
+    local ls = plr:FindFirstChild("leaderstats")
+    if ls then
+        for _, v in ls:GetChildren() do
+            if v:IsA("StringValue") or v:IsA("IntValue") then
+                local n = v.Name:lower()
+                local val = tostring(v.Value):lower()
+                if n:find("team") or n:find("role") then
+                    if val:find("hid") then return "Hiders" end
+                    if val:find("seek") then return "Seekers" end
+                end
+            end
+        end
+    end
+
+    return "Neutral"
+end
+
+local function updatePlayerESP(plr)
+    if plr == LocalPlayer then return end
+    if not plr.Character then return end
+
+    local team = getTeam(plr)
+
+    -- Remove old
+    if ESP[plr] then
+        ESP[plr]:Destroy()
+        ESP[plr] = nil
+    end
+
+    local shouldShow = (team == "Hiders" and espHidersEnabled) or (team == "Seekers" and espSeekersEnabled)
+    if not shouldShow then return end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Adornee = plr.Character
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.Enabled = true
+    highlight.Parent = plr.Character
+
+    if team == "Hiders" then
+        highlight.FillColor = Color3.fromRGB(0, 100, 255)
+        highlight.OutlineColor = Color3.fromRGB(0, 200,255)
+        highlight.FillTransparency = 0.3
+    else -- Seekers
+        highlight.FillColor = Color3.fromRGB(255, 30, 30)
+        highlight.OutlineColor = Color3.fromRGB(255,100,100)
+        highlight.FillTransparency = 0.3
+    end
+
+    ESP[plr] = highlight
+end
+
+local function refreshAllESP()
+    for plr, _ in pairs(ESP) do
+        if plr and plr.Parent then
+            updatePlayerESP(plr)
+        else
+            if ESP[plr] then ESP[plr]:Destroy() end
+            ESP[plr] = nil
+        end
+    end
+
+    for _, plr in Players:GetPlayers() do
+        if plr ~= LocalPlayer and plr.Character then
+            updatePlayerESP(plr)
+        end
+    end
+end
+
+-- Handle new players & respawns
+Players.PlayerAdded:Connect(function(plr)
+    plr.CharacterAdded:Connect(function()
+        task.wait(1)
+        updatePlayerESP(plr)
+    end)
+end)
+
+Players.PlayerRemoving:Connect(function(plr)
+    if ESP[plr] then
+        ESP[plr]:Destroy()
+        ESP[plr] = nil
+    end
+end)
+
+-- Initial scan
+for _, plr in Players:GetPlayers() do
+    if plr.Character then
+        updatePlayerESP(plr)
+    end
+    plr.CharacterAdded:Connect(function()
+        task.wait(1)
+        updatePlayerESP(plr)
+    end)
+end
+
+-- Auto refresh every 5 sec (team changes)
+task.spawn(function()
+    while true do
+        task.wait(5)
+        refreshAllESP()
+    end
+end)
+
+-- ========================================
+-- GUI ELEMENTS (ULTIMATE COIN FARM TOGGLE)
+-- ========================================
+Main:AddToggle({
+    text = "Auto Collect Coin",
+    state = false,
+    callback = function(state)
+        if state then
+            collecting = true
+            task.spawn(function()
+                while collecting do
+                    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+                    local humanoid = char:WaitForChild("Humanoid")
+                    local root = char:WaitForChild("HumanoidRootPart")
+                    lockCharacterUpright(char)
+                    print("ULTIMATE COIN FARM ACTIVE – Standing perfectly on EVERY coin! No floating!")
+                    while collecting and humanoid.Health > 0 and char.Parent do
+                        local waitTime = 0.3
+                        local coinsFolder = workspace:FindFirstChild("COINS") or workspace:FindFirstChild("Coins")
+                        local validCoins = {}
+                        if coinsFolder then
+                            for _, obj in coinsFolder:GetChildren() do
+                                if obj.Name == "Coin" or obj:FindFirstChild("TouchInterest") then
+                                    local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart", true)
+                                    if part and part.Parent then
+                                        table.insert(validCoins, part)
+                                    end
+                                end
+                            end
+                            if #validCoins == 0 then
+                                waitTime = 0.5
+                            else
+                                -- Sort closest first
+                                table.sort(validCoins, function(a, b)
+                                    return (root.Position - a.Position).Magnitude < (root.Position - b.Position).Magnitude
+                                end)
+                                for _, coin in ipairs(validCoins) do
+                                    if not (collecting and coin.Parent and root.Parent and humanoid.Health > 0) then
+                                        break
+                                    end
+
+                                    -- Get the actual touch part
+                                    local touchPart = coin
+                                    if coin:FindFirstChildWhichIsA("BasePart") then
+                                        touchPart = coin:FindFirstChildWhichIsA("BasePart")
+                                    elseif not coin:IsA("BasePart") then
+                                        continue
+                                    end
+
+                                    -- Dynamic height: feet touch coin perfectly
+                                    local heightOffset = 2.2  -- Default for most coins
+                                    if touchPart.Size.Y > 3 then
+                                        heightOffset = touchPart.Size.Y / 2 + 2  -- Auto-adjust for big coins
+                                    end
+
+                                    local targetPos = touchPart.Position + Vector3.new(0, heightOffset, 0)
+
+                                    local distance = (root.Position - targetPos).Magnitude
+                                    local tweenTime = math.clamp(distance / 100, 0.08, 0.3)
+
+                                    local tween = TweenService:Create(
+                                    root,
+                                    TweenInfo.new(tweenTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                                    {CFrame = CFrame.new(targetPos)}
+                                    )
+                                    tween:Play()
+                                    tween.Completed:Wait()
+
+                                    -- Tiny drop: gravity pulls feet ONTO coin (looks 100% natural)
+                                    root.CFrame = root.CFrame - Vector3.new(0, 0.3, 0)
+                                    task.wait(0.05)
+
+                                    task.wait(0.1)  -- Server register
+                                end
+                            end
+                        else
+                            waitTime = 0.5
+                        end
+                        task.wait(waitTime)
+                    end
+                end
+            end)
+            print("Auto Collect Coin: ON")
+        else
+            collecting = false
+            print("Auto Collect Coin: OFF")
+        end
+    end
+})
+
+Main:AddToggle({
+    text = "ESP Hiders",
+    state = false,
+    callback = function(state)
+        espHidersEnabled = state
+        refreshAllESP()
+    end
+})
+
+Main:AddToggle({
+    text = "ESP Seekers",
+    state = false,
+    callback = function(state)
+        espSeekersEnabled = state
+        refreshAllESP()
+    end
+})
+
+Main:AddLabel({text = "YT: ScriptZap0"})
+
+library:Init()
+
+print("Zaporium GUI Loaded Successfully! (ULTIMATE COIN FARM READY)")
