@@ -1,0 +1,209 @@
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Create main window
+local Window = library:CreateWindow("Dont Steal the Bubu")
+
+-- Main folder for the collector features
+local Main = Window:AddFolder("Autofarm")
+
+-- Separate toggles for each rarity
+local enabledRarities = {
+    Legendary = false,
+    Mythic = false,
+    God = false,
+    Secret = false,
+    Exclusive = false
+}
+
+Main:AddToggle({
+    text = "Auto Legendary",
+    state = false,
+    callback = function(v)
+        enabledRarities.Legendary = v
+    end
+})
+
+Main:AddToggle({
+    text = "Auto Mythic",
+    state = false,
+    callback = function(v)
+        enabledRarities.Mythic = v
+    end
+})
+
+Main:AddToggle({
+    text = "Auto God",
+    state = false,
+    callback = function(v)
+        enabledRarities.God = v
+    end
+})
+
+Main:AddToggle({
+    text = "Auto Secret",
+    state = false,
+    callback = function(v)
+        enabledRarities.Secret = v
+    end
+})
+
+Main:AddToggle({
+    text = "Auto Exclusive",
+    state = false,
+    callback = function(v)
+        enabledRarities.Exclusive = v
+    end
+})
+
+-- WalkSpeed slider
+Main:AddSlider({
+    text = "WalkSpeed",
+    min = 16,
+    max = 300,
+    value = 16,
+    flag = "walkspeed",
+    callback = function(v)
+        if game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid") then
+            game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = v
+        end
+    end
+})
+
+-- Credit label (as requested)
+Main:AddLabel({text = "YT: ScriptZap0"})
+
+-- Show the GUI immediately (no toggle keybind)
+library:Init()
+
+print("Zaporium GUI Loaded!")
+
+-- FINAL AUTO RARE COLLECTOR - TP TO NPC + INSTANT FLY HOME (NEWEST HOME POSITION)
+-- Teleports to rare → Instant collect → IMMEDIATELY flies to your latest home position
+-- Guards have ZERO chance to hit you!
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local hum = char:WaitForChild("Humanoid")
+local hrp = char:WaitForChild("HumanoidRootPart")
+
+local NPC_FOLDER = workspace.Map.Zones.Field.NPC
+local SAFE = Vector3.new(-2.80, 4.00, 3.86)  -- YOUR NEWEST CORRECT HOME POSITION
+
+local flying = false
+local speed = 200  -- Fast escape
+local target = nil
+local currentNPC = nil
+
+local function flyTo(pos)
+    target = pos
+    flying = true
+    hum.PlatformStand = true
+    print("🛫 INSTANT FLY HOME →", pos)
+end
+
+local function stop()
+    flying = false
+    target = nil
+    currentNPC = nil
+    hum.PlatformStand = false
+    hrp.Velocity = Vector3.zero
+    print("🏠 Safe at newest home position!")
+end
+
+-- INSTANT TP + COLLECT + IMMEDIATE ESCAPE
+local function tpAndCollect(npc)
+    print("⚡ TELEPORTING TO RARE NPC:", npc.Name)
+
+    local root = npc:FindFirstChild("HumanoidRootPart") or npc.PrimaryPart
+    if not root then
+        print("No root part found!")
+        return
+    end
+
+    -- Instant TP on top
+    hrp.CFrame = root.CFrame + Vector3.new(0, 6, 0)
+
+    -- Spam fire all prompts immediately
+    for _, prompt in ipairs(npc:GetDescendants()) do
+        if prompt:IsA("ProximityPrompt") then
+            print("💥 FIRING →", prompt:GetFullName())
+            prompt.Enabled = true
+            prompt.RequiresLineOfSight = false
+            prompt.HoldDuration = 0
+            prompt.MaxActivationDistance = 50
+            for i = 1, 30 do
+                fireproximityprompt(prompt)
+                task.wait()
+            end
+        end
+    end
+
+    -- NO WAITING - Escape instantly after firing
+    print("✅ COLLECTED! → ESCAPING RIGHT NOW!")
+
+    -- Fly home with small random offset (natural look)
+    local offset = Vector3.new(math.random(-5,5), 0, math.random(-5,5))
+    flyTo(SAFE + offset)
+end
+
+-- Fast return fly loop
+RunService.Heartbeat:Connect(function()
+    if not flying or not target then return end
+
+    local dir = target - hrp.Position
+    if dir.Magnitude < 10 then
+        stop()
+    else
+        hrp.Velocity = dir.Unit * speed
+    end
+end)
+
+-- Rarity detection (respects individual toggles)
+local function isRare(npc)
+    local label = npc:FindFirstChild("Rarity", true)
+    if not label or not label:IsA("TextLabel") then return false end
+    local text = label.Text:upper()
+
+    if text:find("LEGENDARY") and enabledRarities.Legendary then return true end
+    if text:find("MYTHIC") and enabledRarities.Mythic then return true end
+    if text:find("GOD") and enabledRarities.God then return true end
+    if text:find("SECRET") and enabledRarities.Secret then return true end
+    if text:find("EXCLUSIVE") and enabledRarities.Exclusive then return true end
+
+    return false
+end
+
+-- Scanner
+local function scan(npc)
+    if not npc:IsA("Model") or not npc:FindFirstChild("Humanoid") then return end
+
+    task.wait(2)
+
+    if isRare(npc) then
+        local rarityText = npc:FindFirstChild("Rarity", true)
+        print("🎉 RARE DETECTED →", npc.Name, "→", rarityText and rarityText.Text or "Unknown")
+        currentNPC = npc
+        task.spawn(function() tpAndCollect(npc) end)
+    end
+end
+
+-- Scan all NPCs
+for _, v in ipairs(NPC_FOLDER:GetChildren()) do
+    task.spawn(function() scan(v) end)
+end
+NPC_FOLDER.ChildAdded:Connect(function(v)
+    task.spawn(function() scan(v) end)
+end)
+
+-- Respawn handler
+player.CharacterAdded:Connect(function(new)
+    char = new
+    hum = new:WaitForChild("Humanoid")
+    hrp = new:WaitForChild("HumanoidRootPart")
+    stop()
+end)
+
+print("⚡ INSTANT ESCAPE AUTO COLLECTOR LOADED!")
