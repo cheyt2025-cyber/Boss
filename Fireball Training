@@ -1,0 +1,97 @@
+-- ZAPORIUM GUI -
+
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Create main window
+local Window = library:CreateWindow("Fireball Training")
+
+-- Main Features Folder
+local Main = Window:AddFolder("Main Features")
+
+-- Inf Spin Toggle
+Main:AddToggle({
+    text = "Inf Spin",
+    state = false,
+    callback = function(state)
+        if state then
+            spawn(function()
+                while task.wait(0.05) do
+                    if library.flags["Inf Spin"] then
+                        local args = {"Spins", 1}
+                        game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("AddWheelSpinValue"):FireServer(unpack(args))
+                    else
+                        break
+                    end
+                end
+            end)
+        end
+    end
+})
+
+-- Inf Power Toggle
+Main:AddToggle({
+    text = "Inf Power",
+    state = false,
+    callback = function(state)
+        if state then
+            spawn(function()
+                while task.wait(0.05) do
+                    if library.flags["Inf Power"] then
+                        local args = {"Power", 99e9}
+                        game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("AddWheelSpinValue"):FireServer(unpack(args))
+                    else
+                        break
+                    end
+                end
+            end)
+        end
+    end
+})
+
+-- Inf Rewards Toggle
+Main:AddToggle({
+    text = "Inf Rewards",
+    state = false,
+    callback = function(state)
+        if state then
+            spawn(function()
+                while task.wait(0.5) do
+                    if library.flags["Inf Rewards"] then
+                        game:GetService("ReplicatedStorage"):WaitForChild("DailyEvents"):WaitForChild("ClaimDaily"):FireServer()
+                    else
+                        break
+                    end
+                end
+            end)
+        end
+    end
+})
+
+-- Auto Train Toggle (UPDATED to use Cosmic Sword)
+Main:AddToggle({
+    text = "Auto Train",
+    state = false,
+    callback = function(state)
+        if state then
+            spawn(function()
+                while task.wait(0.05) do
+                    if library.flags["Auto Train"] then
+                        pcall(function()  -- Added pcall for safety in case the tool isn't equipped yet
+                            game:GetService("Players").LocalPlayer.Character:WaitForChild("Cosmic Sword"):WaitForChild("Event"):FireServer()
+                        end)
+                    else
+                        break
+                    end
+                end
+            end)
+        end
+    end
+})
+
+-- Keep the credit label
+Main:AddLabel({text = "YT: ScriptZap0"})
+
+-- Init GUI (only once)
+library:Init()
+
+print("Zaporium GUI Loaded!")
