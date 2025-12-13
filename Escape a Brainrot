@@ -1,0 +1,114 @@
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+local player = game.Players.LocalPlayer
+
+-- Functions for Inf Wins
+local worlds = {"Rainbow", "Ocean", "Desert"}
+
+local function getHRP()
+    local char = player.Character
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function getTouchPart(world)
+    local worldFolder = workspace.DynamicObjects.Worlds:FindFirstChild(world)
+    if not worldFolder then return nil end
+    local win = worldFolder:FindFirstChild("Win")
+    if not win then return nil end
+    return win:FindFirstChild("Touch")
+end
+
+-- Create GUI
+local Window = library:CreateWindow("Escape a Brainrot")
+local Main = Window:AddFolder("Main Features")
+
+-- Inf Wins Toggle (moved to top as requested)
+Main:AddToggle({
+    text = "Inf Wins",
+    state = false,
+    flag = "InfWins",
+    callback = function(v)
+        if v then
+            if not firetouchinterest then
+                library.flags.InfWins = false
+                warn("firetouchinterest is not available in your executor.")
+                return
+            end
+            task.spawn(function()
+                print("Inf Wins loop started for Rainbow, Ocean, and Desert (every 1s)...")
+                while library.flags.InfWins do
+                    local hrp = getHRP()
+                    if hrp then
+                        for _, world in ipairs(worlds) do
+                            local touchPart = getTouchPart(world)
+                            if touchPart then
+                                firetouchinterest(hrp, touchPart, 0)
+                                firetouchinterest(hrp, touchPart, 1)
+                            end
+                        end
+                    end
+                    task.wait(1)
+                end
+                print("Inf Wins loop stopped.")
+            end)
+        end
+    end
+})
+
+
+-- WalkSpeed Slider (now below Inf Wins)
+Main:AddSlider({
+    text = "WalkSpeed",
+    min = 16,
+    max = 300,
+    value = 16,
+    flag = "walkspeed",
+    callback = function(v)
+        -- Apply immediately
+        local char = player.Character
+        if char then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum.WalkSpeed = v
+            end
+        end
+    end
+})
+
+Main:AddLabel({text = "YT: ScriptZap0"})
+
+-- Fix WalkSpeed resetting after death or game reset
+player.CharacterAdded:Connect(function(character)
+    local humanoid = character:WaitForChild("Humanoid")
+
+    -- Restore the current slider value after respawn
+    humanoid.WalkSpeed = library.flags.walkspeed or 16
+
+    -- Keep WalkSpeed locked to slider value even if game tries to change it
+    humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+        if library.flags.walkspeed and humanoid.WalkSpeed ~= library.flags.walkspeed then
+            task.defer(function()
+                humanoid.WalkSpeed = library.flags.walkspeed
+            end)
+        end
+    end)
+end)
+
+-- Apply to current character if already loaded
+if player.Character then
+    local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.WalkSpeed = library.flags.walkspeed or 16
+
+        humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+            if library.flags.walkspeed and humanoid.WalkSpeed ~= library.flags.walkspeed then
+                task.defer(function()
+                    humanoid.WalkSpeed = library.flags.walkspeed
+                end)
+            end
+        end)
+    end
+end
+
+-- Init GUI
+library:Init()
