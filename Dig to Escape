@@ -1,0 +1,330 @@
+-- ZAPORIUM GUI -
+
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Create main window
+local Window = library:CreateWindow("Dig to Scape")
+
+-- Main Features folder
+local Main = Window:AddFolder("Main Features")
+
+-- Teleport function (general)
+local function teleportTo(position)
+    local player = game.Players.LocalPlayer
+    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        player.Character.HumanoidRootPart.CFrame = CFrame.new(position)
+    end
+end
+
+-- === GET ALL ITEM FUNCTION ===
+local function getAllItems()
+    local player = game.Players.LocalPlayer
+    local character = player.Character or player.CharacterAdded:Wait()
+    local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+
+    local targetFolder = workspace.Map.Functional:FindFirstChild("SpawnedItems")
+    if not targetFolder then
+        warn("SpawnedItems folder not found!")
+        return
+    end
+
+    -- Position where all items will be brought to (near the player area)
+    local targetPosition = Vector3.new(-39.37, -6.81, 57.59)
+    local targetCFrame = CFrame.new(targetPosition)
+
+    -- Slight random offset so items don't perfectly overlap
+    local offsetRadius = 5
+    local offsetHeight = 3
+    local itemCount = 0
+
+    local function bringItem(item)
+        if not item then return end
+
+        itemCount += 1
+
+        local offset = Vector3.new(
+        math.random(-offsetRadius, offsetRadius),
+        math.random(0, offsetHeight),
+        math.random(-offsetRadius, offsetRadius)
+        )
+
+        if item:IsA("Model") and item.PrimaryPart then
+            item:SetPrimaryPartCFrame(targetCFrame + offset)
+        elseif item:IsA("BasePart") then
+            item.CFrame = targetCFrame + offset
+        end
+    end
+
+    -- Bring every valid item (BasePart or Model with PrimaryPart)
+    for _, item in ipairs(targetFolder:GetDescendants()) do
+        if item:IsA("BasePart") or (item:IsA("Model") and item.PrimaryPart) then
+            bringItem(item)
+        end
+    end
+
+    -- Teleport player slightly above the pile to see everything
+    humanoidRootPart.CFrame = targetCFrame + Vector3.new(0, 8, 0)
+
+    print("Brought " .. itemCount .. " items to the collection point!")
+end
+
+-- ESP Ladder (existing)
+local espEnabled = false
+local espConnections = {}
+local espObjects = {}
+
+local function enableESPLadder()
+    -- (Your full ESP Ladder code remains exactly the same - unchanged)
+    local Players = game:GetService("Players")
+    local RunService = game:GetService("RunService")
+    local TweenService = game:GetService("TweenService")
+    local Camera = workspace.CurrentCamera
+
+    local player = Players.LocalPlayer
+    local character = player.Character or player.CharacterAdded:Wait()
+    local rootPart = character:WaitForChild("HumanoidRootPart")
+
+    local targetModel = workspace.Map.Functional.SpawnedChaseSections.EndSection.Models.Model
+
+    if not targetModel then
+        warn("Ladder model not found!")
+        return
+    end
+
+    if targetModel:IsA("Model") and not targetModel.PrimaryPart then
+        targetModel.PrimaryPart = targetModel:FindFirstChildWhichIsA("BasePart") or targetModel:FindFirstChild("HumanoidRootPart")
+    end
+
+    if not targetModel.PrimaryPart then
+        warn("No PrimaryPart found on ladder model!")
+        return
+    end
+
+    local targetPart = targetModel.PrimaryPart
+
+    local highlight = Instance.new("Highlight")
+    highlight.Adornee = targetModel
+    highlight.FillColor = Color3.new(0, 1, 0)
+    highlight.OutlineColor = Color3.new(1, 1, 0)
+    highlight.FillTransparency = 0.5
+    highlight.OutlineTransparency = 0
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.Parent = targetModel
+    table.insert(espObjects, highlight)
+
+    local billboardGui = Instance.new("BillboardGui")
+    billboardGui.Adornee = targetPart
+    billboardGui.Size = UDim2.new(0, 256, 0, 256)
+    billboardGui.StudsOffset = Vector3.new(0, 8, 0)
+    billboardGui.LightInfluence = 0
+    billboardGui.AlwaysOnTop = true
+    billboardGui.Parent = targetPart
+    table.insert(espObjects, billboardGui)
+
+    local glowFrame = Instance.new("Frame")
+    glowFrame.Size = UDim2.new(1, 0, 1, 0)
+    glowFrame.BackgroundTransparency = 1
+    glowFrame.Parent = billboardGui
+
+    for i = 1, 3 do
+        local ring = Instance.new("Frame")
+        ring.Size = UDim2.new(0, 0, 0, 0)
+        ring.Position = UDim2.new(0.5, 0, 0.5, 0)
+        ring.AnchorPoint = Vector2.new(0.5, 0.5)
+        ring.BackgroundColor3 = Color3.new(1, 1, 0)
+        ring.BackgroundTransparency = 0.7
+        ring.BorderSizePixel = 0
+        local uicorner = Instance.new("UICorner")
+        uicorner.CornerRadius = UDim.new(1, 0)
+        uicorner.Parent = ring
+        ring.Parent = glowFrame
+
+        local tweenInfo = TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
+        local sizeTween = TweenService:Create(ring, tweenInfo, {Size = UDim2.new(1 + i*0.2, 0, 1 + i*0.2, 0)})
+        sizeTween:Play()
+    end
+
+    local arrowIcon = Instance.new("ImageLabel")
+    arrowIcon.Size = UDim2.new(0.6, 0, 0.6, 0)
+    arrowIcon.Position = UDim2.new(0.5, 0, 0.3, 0)
+    arrowIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+    arrowIcon.BackgroundTransparency = 1
+    arrowIcon.Image = "rbxassetid://3926307975"
+    arrowIcon.ImageColor3 = Color3.new(0, 1, 0)
+    arrowIcon.ImageTransparency = 0.2
+    arrowIcon.Parent = glowFrame
+
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.ResetOnSpawn = false
+    screenGui.Parent = player:WaitForChild("PlayerGui")
+    table.insert(espObjects, screenGui)
+
+    local edgeArrow = Instance.new("ImageLabel")
+    edgeArrow.Size = UDim2.new(0, 80, 0, 80)
+    edgeArrow.BackgroundTransparency = 1
+    edgeArrow.Image = "rbxassetid://3926307975"
+    edgeArrow.ImageColor3 = Color3.new(1, 1, 0)
+    edgeArrow.AnchorPoint = Vector2.new(0.5, 0.5)
+    edgeArrow.Parent = screenGui
+    table.insert(espObjects, edgeArrow)
+
+    local edgeOffset = 60
+
+    local function updateBillboardSize()
+        local distance = (rootPart.Position - targetPart.Position).Magnitude
+        local pixelSize = math.clamp(512 / math.max(distance, 10), 96, 512)
+        billboardGui.Size = UDim2.new(0, pixelSize, 0, pixelSize)
+    end
+
+    local connection = RunService.RenderStepped:Connect(function()
+        if not targetPart.Parent then return end
+
+        local worldPos = targetPart.Position
+        local screenPos, onScreen = Camera:WorldToScreenPoint(worldPos)
+
+        updateBillboardSize()
+
+        if onScreen and screenPos.Z > 0 then
+            edgeArrow.Visible = false
+        else
+            edgeArrow.Visible = true
+            local clampedX = math.clamp(screenPos.X, edgeOffset, Camera.ViewportSize.X - edgeOffset)
+            local clampedY = math.clamp(screenPos.Y, edgeOffset, Camera.ViewportSize.Y - edgeOffset)
+            edgeArrow.Position = UDim2.new(0, clampedX, 0, clampedY)
+
+            local dir = Vector2.new(screenPos.X - clampedX, screenPos.Y - clampedY)
+            edgeArrow.Rotation = math.deg(math.atan2(dir.Y, dir.X)) - 90
+        end
+    end)
+    table.insert(espConnections, connection)
+
+    local respawnConn = player.CharacterAdded:Connect(function(newChar)
+        character = newChar
+        rootPart = newChar:WaitForChild("HumanoidRootPart")
+    end)
+    table.insert(espConnections, respawnConn)
+end
+
+local function disableESPLadder()
+    for _, obj in ipairs(espObjects) do
+        if obj and obj.Parent then
+            obj:Destroy()
+        end
+    end
+    for _, conn in ipairs(espConnections) do
+        if conn then
+            conn:Disconnect()
+        end
+    end
+    espObjects = {}
+    espConnections = {}
+end
+
+-- === FULL BRIGHT (already fixed from before) ===
+local Lighting = game:GetService("Lighting")
+
+local originalSettings = {
+    Brightness = Lighting.Brightness,
+    GlobalShadows = Lighting.GlobalShadows,
+    FogEnd = Lighting.FogEnd,
+    ClockTime = Lighting.ClockTime,
+    Ambient = Lighting.Ambient,
+    OutdoorAmbient = Lighting.OutdoorAmbient,
+    ShadowSoftness = Lighting.ShadowSoftness
+}
+
+local fullbrightActive = false
+local fullbrightConnection = nil
+
+local function applyFullbright()
+    Lighting.Brightness = 3
+    Lighting.GlobalShadows = false
+    Lighting.FogEnd = math.huge
+    Lighting.ClockTime = 14
+    Lighting.Ambient = Color3.new(1, 1, 1)
+    Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+    Lighting.ShadowSoftness = 0
+end
+
+local function restoreOriginal()
+    Lighting.Brightness = originalSettings.Brightness
+    Lighting.GlobalShadows = originalSettings.GlobalShadows
+    Lighting.FogEnd = originalSettings.FogEnd
+    Lighting.ClockTime = originalSettings.ClockTime
+    Lighting.Ambient = originalSettings.Ambient
+    Lighting.OutdoorAmbient = originalSettings.OutdoorAmbient
+    Lighting.ShadowSoftness = originalSettings.ShadowSoftness
+end
+
+local function enableFullbright()
+    if fullbrightActive then return end
+    fullbrightActive = true
+    applyFullbright()
+    fullbrightConnection = Lighting.LightingChanged:Connect(function()
+        if fullbrightActive then
+            applyFullbright()
+        end
+    end)
+end
+
+local function disableFullbright()
+    if not fullbrightActive then return end
+    fullbrightActive = false
+    if fullbrightConnection then
+        fullbrightConnection:Disconnect()
+        fullbrightConnection = nil
+    end
+    restoreOriginal()
+end
+
+-- === GUI ELEMENTS (NEW ORDER) ===
+
+-- ESP Ladder Toggle
+Main:AddToggle({
+    text = "ESP Ladder",
+    state = false,
+    callback = function(state)
+        if state then
+            enableESPLadder()
+        else
+            disableESPLadder()
+        end
+    end
+})
+
+-- Full Bright Toggle
+Main:AddToggle({
+    text = "Full Bright",
+    state = false,
+    callback = function(state)
+        if state then
+            enableFullbright()
+        else
+            disableFullbright()
+        end
+    end
+})
+
+-- NEW: Get All Item Button (placed BEFORE TP to Bedrock)
+Main:AddButton({
+    text = "Bring All Item",
+    callback = function()
+        getAllItems()
+    end
+})
+
+-- TP to Bedrock Button
+Main:AddButton({
+    text = "TP to End",
+    callback = function()
+        teleportTo(Vector3.new(-27.79, -516.63, 38.07))
+    end
+})
+
+-- Credit
+Main:AddLabel({text = "YT: ScriptZap0"})
+
+-- Initialize GUI
+library:Init()
+
+print("Zaporium GUI Loaded!")
