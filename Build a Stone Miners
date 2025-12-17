@@ -1,0 +1,38 @@
+-- ZAPORIUM GUI (Updated: Spam Cash as BUTTON instead of Toggle) --
+
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Create main window
+local Window = library:CreateWindow("Zaporium GUI")
+
+-- Main folder
+local Main = Window:AddFolder("Main Features")
+
+-- Spam Cash Button
+Main:AddButton({
+    text = "Spam Cash",
+    callback = function()
+        print("Spam Cash STARTED - Earning cash rapidly!")
+        spawn(function()
+            while true do
+                local args = {
+                    "earned",
+                    10000
+                }
+                game:GetService("ReplicatedStorage"):WaitForChild("MainF"):InvokeServer(unpack(args))
+                task.wait(0.05)  -- ~20 invokes per second (fast but stable)
+            end
+        end)
+    end
+})
+
+-- Description label under the button
+Main:AddLabel({text = "Spam this to get More Cash"})
+
+-- Credit label
+Main:AddLabel({text = "YT: ScriptZap0"})
+
+-- Initialize the GUI
+library:Init()
+
+print("Zaporium GUI Loaded! - Spam Cash Button Added")
