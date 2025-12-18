@@ -1,0 +1,208 @@
+-- ZAPORIUM GUI -
+-- Place this as a LocalScript in StarterPlayer > StarterPlayerScripts
+
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Target rarities for Auto Spawn (Legendary+)
+local TARGET_RARITIES = {
+    "Legendary", "Mythic", "Secret", "Exclusive", "Limited", "Admin"
+}
+
+-- Common args
+local args = {
+    {
+        __raw = true,
+        data = {}
+    }
+}
+
+-- Remotes (all under same path)
+local modules = ReplicatedStorage:WaitForChild("Modules")
+local internals = modules:WaitForChild("Internals")
+local skeleton = internals:WaitForChild("Skeleton")
+local conduit = skeleton:WaitForChild("Conduit")
+local instances = conduit:WaitForChild("Instances")
+
+local hatchRemote = instances:WaitForChild("_requestEgg")
+local collectEarningsRemote = instances:WaitForChild("_collectEarnings")
+local sellStackRemote = instances:WaitForChild("_sellStack")
+local doRebirthRemote = instances:WaitForChild("doRebirth")
+
+-- States
+local autoSpawnEnabled = false
+local autoBoxEnabled = false
+local autoSellEnabled = false
+local autoRebirthEnabled = false
+local spawnPaused = false
+local currentGoodPet = nil
+
+-- Check rarity (case-insensitive)
+local function hasTargetRarity(model)
+    local rarityLabel = model:FindFirstChild("Eggtag", true)
+    if not rarityLabel then return false end
+
+    rarityLabel = rarityLabel:FindFirstChild("Container", true)
+    if not rarityLabel then return false end
+
+    rarityLabel = rarityLabel:FindFirstChild("Rarity", true)
+    if not rarityLabel or not rarityLabel:IsA("TextLabel") then return false end
+
+    local text = rarityLabel.Text:upper()
+
+    for _, rarity in ipairs(TARGET_RARITIES) do
+        if text == rarity:upper() then
+            return true
+        end
+    end
+
+    return false
+end
+
+-- Scan for good pet
+local function scanWorkspace()
+    for _, child in ipairs(Workspace:GetChildren()) do
+        if child:IsA("Model") and hasTargetRarity(child) then
+            return child
+        end
+    end
+    return nil
+end
+
+-- Load GUI Library
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Create main window
+local Window = library:CreateWindow("My Anime Egg Farm")
+
+-- Main Features folder
+local Main = Window:AddFolder("Main Features")
+
+-- Auto Spawn Toggle
+Main:AddToggle({
+    text = "Auto Spawn",
+    state = false,
+    flag = "AutoSpawn",
+    callback = function(v)
+        autoSpawnEnabled = v
+        print("Auto Spawn:", v and "ON" or "OFF")
+    end
+})
+
+-- Description Label
+Main:AddLabel({text = "Spawn until get Legendary+"})
+
+-- Auto Box Toggle
+Main:AddToggle({
+    text = "Auto Box",
+    state = false,
+    flag = "AutoBox",
+    callback = function(v)
+        autoBoxEnabled = v
+        print("Auto Box:", v and "ON" or "OFF")
+    end
+})
+
+-- Auto Sell Toggle
+Main:AddToggle({
+    text = "Auto Sell",
+    state = false,
+    flag = "AutoSell",
+    callback = function(v)
+        autoSellEnabled = v
+        print("Auto Sell:", v and "ON" or "OFF")
+    end
+})
+
+-- Auto Rebirth Toggle
+Main:AddToggle({
+    text = "Auto Rebirth",
+    state = false,
+    flag = "AutoRebirth",
+    callback = function(v)
+        autoRebirthEnabled = v
+        print("Auto Rebirth:", v and "ON" or "OFF")
+    end
+})
+
+-- Credit Label
+Main:AddLabel({text = "YT: ScriptZap0"})
+
+-- Init GUI
+library:Init()
+
+-- Auto Spawn Loop (with pause logic)
+spawn(function()
+    while true do
+        if autoSpawnEnabled then
+            if not spawnPaused then
+                local goodPet = scanWorkspace()
+                if goodPet then
+                    print("Target rarity detected: " .. goodPet.Name .. " - Pausing auto-spawn!")
+                    spawnPaused = true
+                    currentGoodPet = goodPet
+                else
+                    hatchRemote:FireServer(unpack(args))
+                end
+            else
+                if currentGoodPet and not currentGoodPet.Parent then
+                    print("Target pet collected! Resuming auto-spawn...")
+                    spawnPaused = false
+                    currentGoodPet = nil
+                end
+            end
+            task.wait(0.5)
+        else
+            task.wait(1)
+        end
+    end
+end)
+
+-- Auto Box Loop
+spawn(function()
+    while true do
+        if autoBoxEnabled then
+            collectEarningsRemote:FireServer(unpack(args))
+        end
+        task.wait(1)  -- Slower for collect to avoid spam
+    end
+end)
+
+-- Auto Sell Loop
+spawn(function()
+    while true do
+        if autoSellEnabled then
+            sellStackRemote:FireServer(unpack(args))
+        end
+        task.wait(2)  -- Even slower for sell
+    end
+end)
+
+-- Auto Rebirth Loop
+spawn(function()
+    while true do
+        if autoRebirthEnabled then
+            doRebirthRemote:FireServer(unpack(args))
+        end
+        task.wait(1)  -- Slow for rebirth (adjust if needed)
+    end
+end)
+
+-- Instant detection events for Auto Spawn
+Workspace.ChildAdded:Connect(function(child)
+    if autoSpawnEnabled and not spawnPaused and child:IsA("Model") and hasTargetRarity(child) then
+        print("New target rarity spawned: " .. child.Name .. " - Pausing!")
+        spawnPaused = true
+        currentGoodPet = child
+    end
+end)
+
+Workspace.ChildRemoved:Connect(function(child)
+    if autoSpawnEnabled and child == currentGoodPet then
+        print("Target pet removed - Resuming auto-spawn!")
+        spawnPaused = false
+        currentGoodPet = nil
+    end
+end)
+
+print("Zaporium GUI Loaded!")
