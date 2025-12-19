@@ -1,0 +1,208 @@
+-- ZAPORIUM GUI with High-Tier Auto-Farm --
+
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Create main window
+local Window = library:CreateWindow("Dont Wake the Spooky")
+
+-- Main Features Folder
+local Main = Window:AddFolder("Main Features")
+
+-- Services & Variables
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local NPCFolder = workspace:WaitForChild("Map"):WaitForChild("Zones"):WaitForChild("Field"):WaitForChild("NPC")
+
+local TARGET_RARITIES = {}
+local SEEN_SUCCESS = {}
+local busy = false
+local scannerLoop = nil
+
+-- Rarity Detection
+local function getRarity(npc)
+    local oh = npc:FindFirstChild("OverheadAttachment") or npc:FindFirstChild("Head")
+    if not oh then return nil end
+
+    local charInfo = oh:FindFirstChild("CharacterInfo", true)
+    if not charInfo then return nil end
+
+    local frame = charInfo:FindFirstChild("Frame", true)
+    if not frame then return nil end
+
+    local r = frame:FindFirstChild("Rarity", true)
+    if not r then return nil end
+
+    if r:IsA("TextLabel") or r:IsA("TextButton") then
+        return r.Text:match("^%s*(.-)%s*$")
+    end
+    local lbl = r:FindFirstChildWhichIsA("TextLabel") or r:FindFirstChildWhichIsA("TextButton")
+    return lbl and lbl.Text:match("^%s*(.-)%s*$") or nil
+end
+
+-- Pickup Trigger
+local function triggerPickup(npc, hrp, char)
+    local prompts = npc:FindFirstChild("Prompts")
+    if not prompts then return false end
+    local prompt = prompts:FindFirstChildWhichIsA("ProximityPrompt")
+    if not prompt then return false end
+
+    local root = npc:FindFirstChild("HumanoidRootPart") or npc.PrimaryPart
+    if not root then return false end
+
+    local oldCFrame = hrp.CFrame
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then hum.PlatformStand = true end
+
+    hrp.CFrame = root.CFrame * CFrame.new(0, 4, -2)
+    task.wait(0.27)
+
+    prompt.Enabled = true
+    prompt.RequiresLineOfSight = false
+    prompt.MaxActivationDistance = 99999
+    prompt.HoldDuration = 0
+
+    if fireproximityprompt then
+        fireproximityprompt(prompt)
+    else
+        prompt:InputHoldBegin()
+        task.wait(0.03)
+        prompt:InputHoldEnd()
+    end
+
+    task.wait(0.05)
+    hrp.CFrame = oldCFrame
+    if hum then hum.PlatformStand = false end
+
+    return true
+end
+
+-- Farm Function
+local function farm(uuid)
+    local npc = NPCFolder:FindFirstChild(uuid)
+    if not npc then return false end
+
+    local rarity = getRarity(npc)
+    if not rarity or not table.find(TARGET_RARITIES, rarity) then return false end
+
+    local char = player.Character
+    if not char then return false end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+
+    print("⚡ STEALING →", rarity, uuid)
+
+    local success = triggerPickup(npc, hrp, char)
+    if success then
+        task.wait(1.0)
+        print("✅ SECURED", rarity, uuid, "– 100% SAFE")
+        return true
+    end
+    return false
+end
+
+-- Scanner Loop
+local function startScanner()
+    if scannerLoop then return end
+    scannerLoop = task.spawn(function()
+        while task.wait(0.22) do
+            if busy or #TARGET_RARITIES == 0 then continue end
+
+            for _, npc in NPCFolder:GetChildren() do
+                local uuid = npc.Name
+                if not SEEN_SUCCESS[uuid] then
+                    local rarity = getRarity(npc)
+                    if rarity and table.find(TARGET_RARITIES, rarity) then
+                        busy = true
+                        task.spawn(function()
+                            local ok = farm(uuid)
+                            if ok then
+                                SEEN_SUCCESS[uuid] = true
+                            end
+                            busy = false
+                        end)
+                        break
+                    end
+                end
+            end
+        end
+    end)
+end
+
+local function stopScanner()
+    if scannerLoop then
+        task.cancel(scannerLoop)
+        scannerLoop = nil
+    end
+end
+
+-- Function to update active targets
+local function updateTargets()
+    TARGET_RARITIES = {}
+    if library.flags.autolegendary then table.insert(TARGET_RARITIES, "Legendary") end
+    if library.flags.automythic then table.insert(TARGET_RARITIES, "Mythic") end
+    if library.flags.autobrainrot then table.insert(TARGET_RARITIES, "Brainrot God") end
+    if library.flags.autosecret then table.insert(TARGET_RARITIES, "Secret") end
+
+    if #TARGET_RARITIES > 0 then
+        startScanner()
+    else
+        stopScanner()
+    end
+end
+
+-- Toggles for Each Rarity
+Main:AddToggle({
+    text = "Auto Legendary",
+    state = false,
+    flag = "autolegendary",
+    callback = function(state)
+        updateTargets()
+        print("Auto Legendary:", state)
+    end
+})
+
+Main:AddToggle({
+    text = "Auto Mythic",
+    state = false,
+    flag = "automythic",
+    callback = function(state)
+        updateTargets()
+        print("Auto Mythic:", state)
+    end
+})
+
+Main:AddToggle({
+    text = "Auto Brainrot God",
+    state = false,
+    flag = "autobrainrot",
+    callback = function(state)
+        updateTargets()
+        print("Auto Brainrot God:", state)
+    end
+})
+
+Main:AddToggle({
+    text = "Auto Secret",
+    state = false,
+    flag = "autosecret",
+    callback = function(state)
+        updateTargets()
+        print("Auto Secret:", state)
+    end
+})
+
+-- Your Credit
+Main:AddLabel({text = "YT: ScriptZap0"})
+
+-- Handle respawn
+player.CharacterAdded:Connect(function(c)
+    c:WaitForChild("HumanoidRootPart", 10)
+    print("🔄 Respawned → Auto-Farm Ready")
+end)
+
+-- Init GUI
+library:Init()
+
+print("🚀 Zaporium GUI Loaded! High-Tier Auto-Farm Active")
+print("→ Toggle any rarity to start farming instantly")
+print("→ Made by YT: ScriptZap0")
