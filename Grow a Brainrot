@@ -1,0 +1,463 @@
+-- Game Services and Setup
+local Players = game:GetService("Players")
+local TextChatService = game:GetService("TextChatService")
+local player = Players.LocalPlayer
+
+-- Wait for character
+local char = player.Character or player.CharacterAdded:Wait()
+local hrp = char:WaitForChild("HumanoidRootPart")
+
+-- Find closest base to player (your base)
+local function getMyBase()
+    local closestBase = nil
+    local closestDistance = math.huge
+
+    for _, base in ipairs(workspace.Bases:GetChildren()) do
+        local island = base:FindFirstChild("Assets") and base.Assets:FindFirstChild("IslandModel")
+        if island then
+            local grass = island:FindFirstChild("Grass")
+            if grass and #grass:GetChildren() > 0 then
+                local part = grass:GetChildren()[1]
+                if part:IsA("BasePart") then
+                    local dist = (hrp.Position - part.Position).Magnitude
+                    if dist < closestDistance then
+                        closestDistance = dist
+                        closestBase = base
+                    end
+                end
+            end
+        end
+    end
+
+    return closestBase
+end
+
+local MyBase = getMyBase()
+if not MyBase then
+    warn("Could not detect your base")
+end
+
+print("🏠 DETECTED MY BASE:", MyBase and MyBase.Name or "NONE")
+
+-- Your return position (safe spot on your base)
+local myReturnPos = hrp.Position
+if MyBase then
+    local myGrass = MyBase:FindFirstChild("Assets") and MyBase.Assets:FindFirstChild("IslandModel") and MyBase.Assets.IslandModel:FindFirstChild("Grass")
+    if myGrass and #myGrass:GetChildren() > 0 then
+        myReturnPos = myGrass:GetChildren()[1].Position + Vector3.new(0, 8, 0)
+    end
+end
+
+-- Variables for Auto Roll
+local ConveyorFolder
+local isHighRarityPresent = false
+local autoRollEnabled = false
+
+-- Variables for Auto Steal
+local autoStealEnabled = false
+local isSniping = false
+
+-- Rarity settings
+local StopRarities = { Legendary = true, Mythic = true, Secret = true, Exclusive = true }
+local TargetRarities = { Epic = true, Legendary = true, Mythic = true, Secret = true, Exclusive = true }
+local RarityPriority = { Secret = 5, Exclusive = 4, Mythic = 3, Legendary = 2, Epic = 1 }
+
+-- AUTO ROLL LOGIC
+if MyBase then
+    ConveyorFolder = MyBase:WaitForChild("BrainrotsOnCoveyor")
+
+    local dataRemoteEvent = game:GetService("ReplicatedStorage"):WaitForChild("ncxyzero_bridgenet2-fork@1.1.5"):WaitForChild("dataRemoteEvent")
+
+    local rollArgs = {
+        {
+            {
+                "\001",
+                "\vB\250\202\133GK\153\164\238\236\219\159\224{\199",
+                {}
+            },
+            "\018"
+        }
+    }
+
+    local function performRoll()
+        dataRemoteEvent:FireServer(unpack(rollArgs))
+        print("🎲 Performed auto-roll")
+    end
+
+    local function getRarity(model)
+        for _, obj in ipairs(model:GetDescendants()) do
+            if obj:IsA("TextLabel") and obj.Name == "Rarity" then
+                return obj.Text
+            end
+        end
+        return nil
+    end
+
+    local function hasHighRarity(model)
+        local rarity = getRarity(model)
+        return rarity and StopRarities[rarity]
+    end
+
+    local function announceHighRarity(model)
+        local rarity = getRarity(model)
+        if rarity and StopRarities[rarity] then
+            print("🛑 HIGH RARITY DETECTED:", rarity, "in", model.Name)
+            print("🛑 Pausing auto-roll until it's gone (buy it!)")
+            return true
+        end
+        return false
+    end
+
+    for _, model in ipairs(ConveyorFolder:GetChildren()) do
+        if announceHighRarity(model) then
+            isHighRarityPresent = true
+        end
+    end
+
+    ConveyorFolder.ChildAdded:Connect(function(model)
+        task.wait(0.5)
+        if announceHighRarity(model) then
+            isHighRarityPresent = true
+        end
+    end)
+
+    ConveyorFolder.ChildRemoved:Connect(function(model)
+        task.wait(0.3)
+        isHighRarityPresent = false
+        for _, remainingModel in ipairs(ConveyorFolder:GetChildren()) do
+            if hasHighRarity(remainingModel) then
+                isHighRarityPresent = true
+                break
+            end
+        end
+        if not isHighRarityPresent then
+            print("✅ No high-rarity left, resuming auto-roll!")
+        end
+    end)
+
+    task.spawn(function()
+        while true do
+            task.wait(2)
+            if autoRollEnabled and not isHighRarityPresent then
+                performRoll()
+            elseif autoRollEnabled then
+                print("⏸️ Paused: High rarity on your conveyor")
+            end
+        end
+    end)
+end
+
+-- AUTO STEAL LOGIC (Instant TP)
+task.spawn(function()
+    while true do
+        task.wait(1)
+
+        if not autoStealEnabled or isSniping then
+            task.wait(0.5)
+            continue
+        end
+
+        local bestPrompt = nil
+        local bestPriority = 0
+        local bestBaseName = ""
+
+        for _, base in ipairs(workspace.Bases:GetChildren()) do
+            if base == MyBase then continue end
+
+            local timerLabel = base:FindFirstChild("Buttons")
+            and base.Buttons:FindFirstChild("ForceFieldBuy")
+            and base.Buttons.ForceFieldBuy:FindFirstChild("Info")
+            and base.Buttons.ForceFieldBuy.Info:FindFirstChild("Timer")
+
+            if not timerLabel or not timerLabel:IsA("TextLabel") then continue end
+            local timerText = timerLabel.Text:gsub("%s+", "")
+            if timerText ~= "0s" and timerText ~= "0" then continue end
+
+            local setBrainrots = base:FindFirstChild("SetBrainrots")
+            if not setBrainrots then continue end
+
+            for _, brainrot in ipairs(setBrainrots:GetChildren()) do
+                local rarityLabel = brainrot:FindFirstChild("Head", true)
+                and brainrot:FindFirstChild("Head", true):FindFirstChild("RunwayBGUINew", true)
+                and brainrot:FindFirstChild("Head", true):FindFirstChild("RunwayBGUINew", true):FindFirstChild("Main", true)
+                and brainrot:FindFirstChild("Head", true):FindFirstChild("RunwayBGUINew", true):FindFirstChild("Main", true):FindFirstChild("Rarity")
+
+                if not rarityLabel or not rarityLabel:IsA("TextLabel") then continue end
+                local rarity = rarityLabel.Text
+                if not TargetRarities[rarity] then continue end
+
+                local priority = RarityPriority[rarity] or 0
+                if priority > bestPriority then
+                    local prompt = brainrot:FindFirstChildWhichIsA("ProximityPrompt", true)
+                    if prompt and prompt.Enabled then
+                        bestPrompt = prompt
+                        bestPriority = priority
+                        bestBaseName = base.Name
+                    end
+                end
+            end
+        end
+
+        if bestPrompt then
+            isSniping = true
+            local targetPos = bestPrompt.Parent.Position + Vector3.new(0, 8, 0)
+
+            print("🎯 AUTO STEALING FROM BASE [" .. bestBaseName .. "]!")
+
+            hrp.CFrame = CFrame.new(targetPos)
+
+            task.wait(0.2)
+            fireproximityprompt(bestPrompt)
+
+            print("✅ Stolen! Returning to base...")
+            hrp.CFrame = CFrame.new(myReturnPos)
+
+            task.wait(2)
+            isSniping = false
+        end
+    end
+end)
+
+-- ESP BASE TIMER (Toggleable, moderate size)
+local Bases = workspace:WaitForChild("Bases")
+local espEnabled = true
+local modifiedTimers = {}
+
+local function applyESP(timerLabel)
+    if not timerLabel or not timerLabel:IsA("TextLabel") then return end
+
+    timerLabel.ClipsDescendants = false
+    timerLabel.TextScaled = true
+    timerLabel.TextStrokeTransparency = 0
+    timerLabel.BackgroundTransparency = 0.3 -- slightly visible
+    timerLabel.Size = UDim2.fromOffset(150, 40) -- moderate size
+    timerLabel.Position = UDim2.fromScale(0.5, 0.5)
+    timerLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+
+    local gui = timerLabel:FindFirstAncestorWhichIsA("BillboardGui") or timerLabel:FindFirstAncestorWhichIsA("SurfaceGui")
+    if gui then
+        gui.ClipsDescendants = false
+        gui.AlwaysOnTop = true
+        gui.MaxDistance = math.huge
+
+        if gui:IsA("BillboardGui") then
+            gui.Size = UDim2.fromOffset(200, 50) -- moderate, readable size
+            gui.StudsOffset = Vector3.new(0, 3, 0)
+        elseif gui:IsA("SurfaceGui") then
+            gui.CanvasSize = Vector2.new(200, 50)
+        end
+
+        modifiedTimers[timerLabel] = gui
+    end
+end
+
+local function removeESP(timerLabel)
+    if not timerLabel or not modifiedTimers[timerLabel] then return end
+
+    timerLabel.TextScaled = false
+    timerLabel.TextStrokeTransparency = 1
+    timerLabel.BackgroundTransparency = 0.5
+    timerLabel.Size = UDim2.new(0, 100, 0, 50)
+    timerLabel.Position = UDim2.new(0.5, 0, 0.5, 0)
+    timerLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+
+    local gui = modifiedTimers[timerLabel]
+    if gui then
+        gui.AlwaysOnTop = false
+        gui.MaxDistance = 100
+
+        if gui:IsA("BillboardGui") then
+            gui.Size = UDim2.fromOffset(200, 50)
+            gui.StudsOffset = Vector3.new(0, 2, 0)
+        elseif gui:IsA("SurfaceGui") then
+            gui.CanvasSize = Vector2.new(200, 50)
+        end
+    end
+
+    modifiedTimers[timerLabel] = nil
+end
+
+local function updateAllTimers()
+    for _, base in ipairs(Bases:GetChildren()) do
+        local timer = base:FindFirstChild("Buttons", true)
+        and base:FindFirstChild("Buttons", true):FindFirstChild("ForceFieldBuy", true)
+        and base:FindFirstChild("Buttons", true):FindFirstChild("ForceFieldBuy", true):FindFirstChild("Info", true)
+        and base:FindFirstChild("Buttons", true):FindFirstChild("ForceFieldBuy", true):FindFirstChild("Info", true):FindFirstChild("Timer")
+
+        if timer then
+            if espEnabled then
+                applyESP(timer)
+            else
+                removeESP(timer)
+            end
+        end
+    end
+end
+
+updateAllTimers()
+
+Bases.ChildAdded:Connect(function(base)
+    task.wait(0.4)
+    local timer = base:FindFirstChild("Buttons", true)
+    and base:FindFirstChild("Buttons", true):FindFirstChild("ForceFieldBuy", true)
+    and base:FindFirstChild("Buttons", true):FindFirstChild("ForceFieldBuy", true):FindFirstChild("Info", true)
+    and base:FindFirstChild("Buttons", true):FindFirstChild("ForceFieldBuy", true):FindFirstChild("Info", true):FindFirstChild("Timer")
+
+    if timer and espEnabled then
+        applyESP(timer)
+    end
+end)
+
+-- TROLL CHAT MESSAGES
+local trollMessages = {
+    "Come to my base free brainrot 🔥",
+    "FREE brainrot at my base rn",
+    "Quick free brainrot at my base",
+    "My base has free brainrot, trust",
+    "Don’t miss it, free brainrot at my base"
+}
+
+local function sendTrollMessage()
+    local msg = trollMessages[math.random(1, #trollMessages)]
+
+    if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+        local channel = TextChatService.TextChannels.RBXGeneral
+        if channel then
+            channel:SendAsync(msg)
+        end
+    else
+        game.ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(msg, "All")
+    end
+
+    print("😈 Sent troll message: " .. msg)
+end
+
+-- ZAPORIUM GUI
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+local Window = library:CreateWindow("Grow A Brainrot")
+local Main = Window:AddFolder("Main Features")
+
+-- =========================
+-- AUTO LOCK BASE TOGGLE
+-- =========================
+local autoLockEnabled = false
+local isActivating = false
+
+local function activateForcefield()
+    if isActivating or not autoLockEnabled then return end
+    if not MyBase then
+        warn("No base detected, cannot activate Forcefield")
+        return
+    end
+
+    local ForceFieldBuy = MyBase:FindFirstChild("Buttons") and MyBase.Buttons:FindFirstChild("ForceFieldBuy")
+    if not ForceFieldBuy then return end
+
+    local plate = ForceFieldBuy:FindFirstChild("Plate")
+    if not plate or not plate:IsA("BasePart") then return end
+
+    local targetPos = plate.Position + Vector3.new(0, 3, 0)
+    local returnPos = myReturnPos or hrp.Position
+
+    isActivating = true
+    print("🛡️ Auto Lock Base: Stepping on Plate to lock Forcefield...")
+
+    hrp.CFrame = CFrame.new(targetPos)
+    task.wait(0.3)
+    print("✅ Stepped on Plate - Forcefield should now be locked!")
+    task.wait(0.5)
+    hrp.CFrame = CFrame.new(returnPos)
+
+    task.wait(2)
+    isActivating = false
+end
+
+local timerLabel = MyBase and MyBase:FindFirstChild("Buttons")
+and MyBase.Buttons:FindFirstChild("ForceFieldBuy")
+and MyBase.Buttons.ForceFieldBuy:FindFirstChild("Info")
+and MyBase.Buttons.ForceFieldBuy.Info:FindFirstChild("Timer")
+
+if timerLabel and timerLabel:IsA("TextLabel") then
+    timerLabel:GetPropertyChangedSignal("Text"):Connect(function()
+        local text = timerLabel.Text:gsub("%s+", "")
+        if (text == "0s" or text == "0" or text == "") then
+            activateForcefield()
+        end
+    end)
+
+    timerLabel.AncestryChanged:Connect(function()
+        if not timerLabel.Parent then
+            activateForcefield()
+        end
+    end)
+end
+
+Main:AddToggle({
+    text = "Auto Lock Base",
+    state = false,
+    flag = "AutoLockBase",
+    callback = function(v)
+        autoLockEnabled = v
+        print("Auto Lock Base:", v and "Enabled" or "Disabled")
+        if v and timerLabel and (timerLabel.Text:gsub("%s+", "") == "0" or timerLabel.Text:gsub("%s+", "") == "0s" or timerLabel.Text:gsub("%s+", "") == "") then
+            activateForcefield()
+        end
+    end
+})
+
+-- =========================
+-- AUTO ROLL TOGGLE
+-- =========================
+Main:AddToggle({
+    text = "Auto Roll",
+    state = false,
+    flag = "AutoRoll",
+    callback = function(v)
+        autoRollEnabled = v
+        print("Auto Roll:", v and "Enabled" or "Disabled")
+    end
+})
+
+-- =========================
+-- AUTO STEAL TOGGLE
+-- =========================
+Main:AddToggle({
+    text = "Auto Steal",
+    state = false,
+    flag = "AutoSteal",
+    callback = function(v)
+        autoStealEnabled = v
+        print("Auto Steal:", v and "Enabled" or "Disabled")
+    end
+})
+
+-- =========================
+-- ESP BASE TOGGLE
+-- =========================
+Main:AddToggle({
+    text = "ESP Base",
+    state = true,
+    flag = "ESPBase",
+    callback = function(v)
+        espEnabled = v
+        print("ESP Base (Timer Visibility):", v and "Enabled" or "Disabled")
+        updateAllTimers()
+    end
+})
+
+-- =========================
+-- Troll Chat Button
+-- =========================
+Main:AddButton({
+    text = "Troll Chat",
+    callback = function()
+        sendTrollMessage()
+    end
+})
+
+-- Credit
+Main:AddLabel({text = "YT: ScriptZap0"})
+
+library:Init()
+
+print("Grow A Brainrot GUI Loaded! | Auto Lock Base • Auto Roll • Auto Steal • ESP Base • Troll Chat Button")
