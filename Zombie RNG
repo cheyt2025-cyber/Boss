@@ -1,0 +1,215 @@
+-- ZAPORIUM GUI - FINAL VERSION WITH KILL AURA + GOD MODE --
+
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Create main window
+local Window = library:CreateWindow("Zombie RNG")
+
+-- Main Features Folder
+local Main = Window:AddFolder("Main Features")
+
+-- Services
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+
+local player = Players.LocalPlayer
+
+------------------------------------------------------------
+-- ===================== GOD MODE =========================
+------------------------------------------------------------
+
+local godModeEnabled = false
+local godModeConnection
+local stateConnections = {}
+
+local function applyGodMode(character)
+    local humanoid = character:WaitForChild("Humanoid")
+
+    humanoid.MaxHealth = math.huge
+    humanoid.Health = math.huge
+
+    humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+    humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+    humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+    humanoid:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, false)
+
+    -- Block death & health drain
+    stateConnections[#stateConnections + 1] =
+    humanoid.StateChanged:Connect(function(_, new)
+        if godModeEnabled and new == Enum.HumanoidStateType.Dead then
+            humanoid.Health = math.huge
+            humanoid:ChangeState(Enum.HumanoidStateType.Running)
+        end
+    end)
+
+    stateConnections[#stateConnections + 1] =
+    humanoid.HealthChanged:Connect(function(h)
+        if godModeEnabled and h <= 0 then
+            humanoid.Health = math.huge
+        end
+    end)
+end
+
+Main:AddToggle({
+    text = "GodMode",
+    state = false,
+    flag = "godmode",
+    callback = function(enabled)
+        godModeEnabled = enabled
+
+        if enabled then
+            print("God Mode Activated 🛡️")
+
+            if player.Character then
+                applyGodMode(player.Character)
+            end
+
+            godModeConnection = RunService.Heartbeat:Connect(function()
+                if not godModeEnabled then return end
+
+                pcall(function()
+                    local char = player.Character
+                    if not char then return end
+
+                    local hum = char:FindFirstChildOfClass("Humanoid")
+                    if not hum then return end
+
+                    hum.MaxHealth = math.huge
+                    hum.Health = math.huge
+                end)
+            end)
+
+        else
+            print("God Mode Deactivated")
+
+            if godModeConnection then
+                godModeConnection:Disconnect()
+                godModeConnection = nil
+            end
+
+            for _, c in ipairs(stateConnections) do
+                c:Disconnect()
+            end
+            stateConnections = {}
+        end
+    end
+})
+
+-- Reapply GodMode on respawn
+player.CharacterAdded:Connect(function(char)
+    if godModeEnabled then
+        applyGodMode(char)
+    end
+end)
+
+------------------------------------------------------------
+-- ===================== KILL AURA ========================
+------------------------------------------------------------
+
+local ServerZombies = Workspace:WaitForChild("ServerZombies")
+local Packages = ReplicatedStorage:WaitForChild("Packages")
+local _Index = Packages:WaitForChild("_Index")
+local knitFolder = _Index:WaitForChild("sleitnick_knit@1.6.0")
+local knit = knitFolder:WaitForChild("knit")
+local Services = knit:WaitForChild("Services")
+local WeaponsManager = Services:WaitForChild("WeaponsManager")
+local RE = WeaponsManager:WaitForChild("RE")
+local AttackRemote = RE:WaitForChild("AttackRemote")
+
+local char = player.Character or player.CharacterAdded:Wait()
+local root = char:WaitForChild("HumanoidRootPart")
+local humanoid = char:WaitForChild("Humanoid")
+
+local auraConnection
+local lastAttackTime = 0
+local attackCooldown = 0.42
+local lerpAlpha = 0.5
+local attackRange = 18
+local maxHitsPerTick = 10
+
+Main:AddToggle({
+    text = "Kill Aura",
+    state = false,
+    flag = "killaura",
+    callback = function(enabled)
+        if enabled then
+            local function updateAura()
+                if not root or not humanoid then return end
+
+                local crowbar = char:FindFirstChild("CROWBAR") or player.Backpack:FindFirstChild("CROWBAR")
+                if crowbar and crowbar.Parent ~= char then
+                    crowbar.Parent = char
+                end
+
+                if crowbar and tick() - lastAttackTime >= attackCooldown then
+                    for _, z in ipairs(ServerZombies:GetChildren()) do
+                        local hum = z:FindFirstChildOfClass("Humanoid")
+                        local zr = z:FindFirstChild("HumanoidRootPart")
+                        if hum and zr and hum.Health > 0 then
+                            if (root.Position - zr.Position).Magnitude <= attackRange then
+                                local old = root.CFrame
+                                root.CFrame = zr.CFrame * CFrame.new(0, 5, 2)
+                                AttackRemote:FireServer(crowbar, 0.4083333, nil, 2)
+                                root.CFrame = old
+                                lastAttackTime = tick()
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+
+            auraConnection = RunService.Heartbeat:Connect(updateAura)
+        else
+            if auraConnection then
+                auraConnection:Disconnect()
+                auraConnection = nil
+            end
+        end
+    end
+})
+
+------------------------------------------------------------
+-- ===================== WALKSPEED ========================
+------------------------------------------------------------
+
+local WalkSpeedValue = 16
+
+Main:AddSlider({
+    text = "WalkSpeed",
+    min = 16,
+    max = 300,
+    value = 16,
+    flag = "walkspeed",
+    callback = function(v)
+        WalkSpeedValue = v
+    end
+})
+
+spawn(function()
+    while true do
+        task.wait()
+        pcall(function()
+            local c = player.Character
+            if c and c:FindFirstChild("Humanoid") then
+                c.Humanoid.WalkSpeed = WalkSpeedValue
+            end
+        end)
+    end
+end)
+
+player.CharacterAdded:Connect(function(c)
+    c:WaitForChild("Humanoid").WalkSpeed = WalkSpeedValue
+end)
+
+------------------------------------------------------------
+-- ===================== CREDIT ===========================
+------------------------------------------------------------
+
+Main:AddLabel({ text = "YT: ScriptZap0" })
+
+library:Init()
+print("Zaporium GUI Loaded! Kill Aura + GodMode + WalkSpeed")
+
