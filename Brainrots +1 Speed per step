@@ -1,0 +1,48 @@
+-- ZAPORIUM GUI -
+
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Create main window
+local Window = library:CreateWindow("Brainrots +1 Speed Per Step")
+
+-- Main Features folder
+local Main = Window:AddFolder("Main Features")
+
+-- Services
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local localPlayer = Players.LocalPlayer
+local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Events"):WaitForChild("WinButton")
+
+-- Infinite Win Toggle
+local infWinLoop = nil
+
+Main:AddToggle({
+    text = "Inf Win",
+    state = false,
+    callback = function(state)
+        if state then
+            -- Start the loop
+            infWinLoop = task.spawn(function()
+                while task.wait(0.1) do
+                    if not library.flags["Inf Win"] then -- Check if toggle is still on
+                        break
+                    end
+                    remote:FireServer(localPlayer, 200)
+                end
+            end)
+            print("Inf Win: ON")
+        else
+            -- Toggle turned off (loop will stop automatically due to flag check)
+            print("Inf Win: OFF")
+        end
+    end
+})
+
+-- Your credit
+Main:AddLabel({text = "YT: ScriptZap0"})
+
+-- Initialize the GUI
+library:Init()
+
+print("Zaporium GUI Loaded! - Inf Win Added")
