@@ -1,0 +1,137 @@
+-- ZAPORIUM GUI with UNINTERRUPTIBLE WalkSpeed + Kill Aura + Unlock VIP
+-- WalkSpeed now FORCED every frame → never resets (even during animations, jumps, stuns, etc.)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+
+-- Kill Aura Variables & Functions (unchanged, still perfect)
+local KillAuraEnabled = false
+local multiplier = 10  -- Knife reach multiplier
+
+local function enlargePart(part)
+    if not KillAuraEnabled then return end
+    if part.Name == "RootPart" and part:IsA("BasePart") then
+        if not part:GetAttribute("KillAuraOriginalSize") then
+            part:SetAttribute("KillAuraOriginalSize", part.Size)
+        end
+        part.Size = part:GetAttribute("KillAuraOriginalSize") * multiplier
+        part.Transparency = 1
+        part.CanCollide = false
+    end
+end
+
+local function restorePart(part)
+    if part.Name == "RootPart" and part:IsA("BasePart") then
+        local origSize = part:GetAttribute("KillAuraOriginalSize")
+        if origSize then
+            part.Size = origSize
+            part:SetAttribute("KillAuraOriginalSize", nil)
+        end
+    end
+end
+
+local function enlargeHitboxes(weapon)
+    for _, part in ipairs(weapon:GetDescendants()) do
+        enlargePart(part)
+    end
+end
+
+local function restoreHitboxes(weapon)
+    for _, part in ipairs(weapon:GetDescendants()) do
+        restorePart(part)
+    end
+end
+
+local function onCharacterAdded(character)
+    if not KillAuraEnabled then return end
+    local weapon = character:WaitForChild("Weapon", 10)
+    if weapon then
+        enlargeHitboxes(weapon)
+        weapon.DescendantAdded:Connect(function(descendant)
+            task.wait(0.1)
+            enlargePart(descendant)
+        end)
+    end
+end
+
+player.CharacterAdded:Connect(onCharacterAdded)
+if player.Character then
+    onCharacterAdded(player.Character)
+end
+
+-- NEW: Persistent WalkSpeed (forces your chosen speed EVERY frame)
+local currentWalkSpeed = 16  -- Default, will be updated by slider
+
+RunService.Heartbeat:Connect(function()
+    if player.Character and player.Character:FindFirstChild("Humanoid") then
+        player.Character.Humanoid.WalkSpeed = currentWalkSpeed
+    end
+end)
+
+-- ZAPORIUM GUI
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+local Window = library:CreateWindow("blade battle")
+local Main = Window:AddFolder("Main Features")
+
+-- Kill Aura Toggle
+Main:AddToggle({
+    text = "Kill Aura",
+    state = false,
+    flag = "killaura",
+    callback = function(state)
+        KillAuraEnabled = state
+        if player.Character then
+            local weapon = player.Character:FindFirstChild("Weapon")
+            if weapon then
+                if state then
+                    enlargeHitboxes(weapon)
+                else
+                    restoreHitboxes(weapon)
+                end
+            end
+        end
+        print("Kill Aura:", state and "ON" or "OFF")
+    end
+})
+
+-- Unlock VIP Toggle
+Main:AddToggle({
+    text = "Unlock VIP",
+    state = false,
+    flag = "unlockvip",
+    callback = function(enabled)
+        if enabled then
+            pcall(function()
+                local door1 = workspace["\229\156\186\230\153\175"]["VIP\229\140\186\229\159\159"]["VIP\229\140\186\229\159\159"].Door
+                if door1 then door1:Destroy() end
+            end)
+            pcall(function()
+                local vipFolder = workspace["\229\156\186\230\153\175"]["VIP\229\140\186\229\159\159"]
+                local door2 = vipFolder:GetChildren()[2].Door
+                if door2 then door2:Destroy() end
+            end)
+            print("VIP Doors Removed!")
+        end
+    end
+})
+
+-- WalkSpeed Slider (NOW UNINTERRUPTIBLE!)
+Main:AddSlider({
+    text = "WalkSpeed",
+    min = 16,
+    max = 300,
+    value = 16,
+    flag = "walkspeed",
+    callback = function(v)
+        currentWalkSpeed = v
+        print("WalkSpeed set to:", v, "(forced every frame - nothing can reset it!)")
+    end
+})
+
+-- Credit
+Main:AddLabel({text = "YT: ScriptZap0"})
+
+library:Init()
+
+print("Zaporium GUI Loaded - WalkSpeed is now UNSTOPPABLE! 🚀")
