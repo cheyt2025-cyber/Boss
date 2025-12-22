@@ -1,0 +1,87 @@
+-- ZAPORIUM GUI (Added Auto Rebirth Toggle) --
+
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Create main window
+local Window = library:CreateWindow("Kick Door To Escape")
+
+-- Main Features Folder
+local Main = Window:AddFolder("Main Features")
+
+-- Win Remote path
+local winRemote = game:GetService("ReplicatedStorage"):WaitForChild("Remote"):WaitForChild("Event"):WaitForChild("Game"):WaitForChild("[C-S]PlayerWin")
+
+-- Rebirth Remote path
+local rebirthRemote = game:GetService("ReplicatedStorage"):WaitForChild("Remote"):WaitForChild("Event"):WaitForChild("Eco"):WaitForChild("[C-S]PlayerTryRebirth")
+
+-- Auto Win W1 (fires "1" every 1 second)
+Main:AddToggle({
+    text = "Auto Win W1",
+    state = false,
+    flag = "AutoWinW1",
+    callback = function(enabled)
+        if enabled then
+            spawn(function()
+                while task.wait(1) and library.flags.AutoWinW1 do
+                    winRemote:FireServer("1")
+                end
+            end)
+        end
+    end
+})
+
+-- Auto Win W2 (fires "2" every 1 second)
+Main:AddToggle({
+    text = "Auto Win W2",
+    state = false,
+    flag = "AutoWinW2",
+    callback = function(enabled)
+        if enabled then
+            spawn(function()
+                while task.wait(1) and library.flags.AutoWinW2 do
+                    winRemote:FireServer("2")
+                end
+            end)
+        end
+    end
+})
+
+-- Auto Win W3 (fires "3" every 1 second)
+Main:AddToggle({
+    text = "Auto Win W3",
+    state = false,
+    flag = "AutoWinW3",
+    callback = function(enabled)
+        if enabled then
+            spawn(function()
+                while task.wait(1) and library.flags.AutoWinW3 do
+                    winRemote:FireServer("3")
+                end
+            end)
+        end
+    end
+})
+
+-- NEW: Auto Rebirth (fires rebirth remote every 1 second)
+Main:AddToggle({
+    text = "Auto Rebirth",
+    state = false,
+    flag = "AutoRebirth",
+    callback = function(enabled)
+        if enabled then
+            spawn(function()
+                while task.wait(1) and library.flags.AutoRebirth do
+                    rebirthRemote:FireServer()
+                end
+            end)
+        end
+    end
+})
+
+-- Your Credit
+Main:AddLabel({text = "YT: ScriptZap0"})
+
+-- Init GUI
+library:Init()
+
+print("Zaporium GUI Loaded - Auto Win W1/W2/W3 + Auto Rebirth!")
