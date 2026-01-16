@@ -1,0 +1,309 @@
+-- ZAPORIUM GUI - Cleaned + ESP Brainrot Toggle + Persistent WalkSpeed + Custom Speed Attribute Hack
+
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Create main window
+local Window = library:CreateWindow("Escape Tsunami for Brainrots")
+
+-- Main folder
+local Main = Window:AddFolder("Main Features")
+
+-- Your credit
+
+
+-- ────────────────────────────────────────────────
+-- Persistent WalkSpeed + Custom "CurrentSpeed" Attribute Hack (for game shop/movement)
+-- ────────────────────────────────────────────────
+local player = game.Players.LocalPlayer
+local desiredSpeed = 16
+
+Main:AddSlider({
+    text = "WalkSpeed",
+    min = 16,
+    max = 300,
+    value = 16,
+    flag = "walkspeed",
+    callback = function(v)
+        desiredSpeed = v
+
+        -- Apply immediately
+        pcall(function()
+            player:SetAttribute("CurrentSpeed", v)
+        end)
+
+        local char = player.Character
+        if char then
+            local hum = char:FindFirstChildWhichIsA("Humanoid")
+            if hum then
+                hum.WalkSpeed = v
+            end
+        end
+        print("Speed set to:", v)
+    end
+})
+
+-- Re-apply on every respawn
+player.CharacterAdded:Connect(function(char)
+    task.wait(0.6)
+    local hum = char:WaitForChild("Humanoid", 8)
+    if hum then
+        hum.WalkSpeed = desiredSpeed
+
+        -- Fight back if game tries to change WalkSpeed
+        hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+            if hum.WalkSpeed ~= desiredSpeed then
+                hum.WalkSpeed = desiredSpeed
+            end
+        end)
+    end
+
+    -- Set attribute on respawn
+    pcall(function()
+        player:SetAttribute("CurrentSpeed", desiredSpeed)
+    end)
+end)
+
+-- Apply right now if already spawned
+do
+    local char = player.Character
+    if char then
+        local hum = char:FindFirstChildWhichIsA("Humanoid")
+        if hum then
+            hum.WalkSpeed = desiredSpeed
+        end
+    end
+    pcall(function()
+        player:SetAttribute("CurrentSpeed", desiredSpeed)
+    end)
+end
+
+-- Extra safety: Heartbeat override for BOTH WalkSpeed & CurrentSpeed attribute
+game:GetService("RunService").Heartbeat:Connect(function()
+    if desiredSpeed <= 16 then return end
+
+    -- Force attribute (game UI/movement might read it client-side)
+    pcall(function()
+        local currentAttr = player:GetAttribute("CurrentSpeed")
+        if currentAttr ~= desiredSpeed then
+            player:SetAttribute("CurrentSpeed", desiredSpeed)
+        end
+    end)
+
+    -- Force Humanoid WalkSpeed
+    local char = player.Character
+    if char then
+        local hum = char:FindFirstChildWhichIsA("Humanoid")
+        if hum and hum.WalkSpeed ~= desiredSpeed then
+            hum.WalkSpeed = desiredSpeed
+        end
+    end
+end)
+
+-- ────────────────────────────────────────────────
+-- ESP Brainrot Toggle
+-- ────────────────────────────────────────────────
+local ESP_Connection_1
+local ESP_Connection_2
+local ESP_Connection_3
+local esps = {}  -- moved outside for cleanup
+
+Main:AddToggle({
+    text = "ESP Brainrot",
+    state = false,
+    flag = "esp_brainrot",
+    callback = function(enabled)
+        if enabled then
+            -- ULTRA High-Tier ESP (Mythical, Secret, Cosmic, Celestial)
+
+            local Players = game:GetService("Players")
+            local UserInputService = game:GetService("UserInputService")
+
+            local ActiveBrainrots = workspace:WaitForChild("ActiveBrainrots", 10)
+            if not ActiveBrainrots then
+                warn("[ESP] ActiveBrainrots not found!")
+                return
+            end
+
+            local HIGH_TIERS = {"Celestial", "Cosmic", "Mythical", "Secret"}
+
+            local highTierFolders = {}
+            for _, tier in ipairs(HIGH_TIERS) do
+                local folder = ActiveBrainrots:FindFirstChild(tier)
+                if folder then
+                    table.insert(highTierFolders, folder)
+                end
+            end
+
+            local ESP_COLORS = {
+                Mythical  = Color3.fromRGB(255, 215, 0),    -- Gold
+                Secret    = Color3.fromRGB(255, 0, 255),    -- Magenta
+                Cosmic    = Color3.fromRGB(0, 255, 255),    -- Cyan
+                Celestial = Color3.fromRGB(255, 255, 0),    -- Bright Yellow
+            }
+
+            local ESP_SIZE = 60
+
+            local function createESP(pet)
+                local handle = pet:FindFirstChild("Handle")
+                if not handle or handle:FindFirstChild("UltraESP") then return end
+
+                local statsGui = handle:FindFirstChild("StatsGui")
+                if not statsGui then return end
+
+                local frame = statsGui:FindFirstChild("Frame")
+                if not frame then return end
+
+                local classLabel = frame:FindFirstChild("Class")
+                if not classLabel or not classLabel:IsA("TextLabel") then return end
+
+                local rarity = classLabel.Text:match("^%s*(.-)%s*$")
+                if not rarity or not table.find(HIGH_TIERS, rarity) then return end
+
+                local espGui = Instance.new("BillboardGui")
+                espGui.Name = "UltraESP"
+                espGui.Adornee = handle
+                espGui.Size = UDim2.new(0, ESP_SIZE, 0, ESP_SIZE / 2)
+                espGui.StudsOffset = Vector3.new(0, 8, 0)
+                espGui.LightInfluence = 0
+                espGui.AlwaysOnTop = true
+                espGui.Parent = handle
+
+                local bg = Instance.new("Frame")
+                bg.Name = "BG"
+                bg.Size = UDim2.new(1, 8, 1, 8)
+                bg.Position = UDim2.new(0, -4, 0, -4)
+                bg.BackgroundColor3 = Color3.new(0,0,0)
+                bg.BackgroundTransparency = 0.3
+                bg.BorderSizePixel = 0
+                bg.Parent = espGui
+
+                local corner = Instance.new("UICorner")
+                corner.CornerRadius = UDim.new(0, 16)
+                corner.Parent = bg
+
+                local shadow = bg:Clone()
+                shadow.Name = "Shadow"
+                shadow.Position = UDim2.new(0, -2, 0, -2)
+                shadow.BackgroundTransparency = 0.6
+                shadow.ZIndex = bg.ZIndex - 1
+                shadow.Parent = espGui
+
+                local nameLabel = Instance.new("TextLabel")
+                nameLabel.Name = "Name"
+                nameLabel.Size = UDim2.new(1,0,0.55,0)
+                nameLabel.Position = UDim2.new(0,0,0,0)
+                nameLabel.BackgroundTransparency = 1
+                nameLabel.Text = pet.Name
+                nameLabel.Font = Enum.Font.GothamBold
+                nameLabel.TextScaled = true
+                nameLabel.TextColor3 = Color3.new(1,1,1)
+                nameLabel.TextStrokeTransparency = 0
+                nameLabel.TextStrokeColor3 = Color3.new(0,0,0)
+                nameLabel.TextXAlignment = Enum.TextXAlignment.Center
+                nameLabel.Parent = espGui
+
+                local rarityLabel = Instance.new("TextLabel")
+                rarityLabel.Name = "Rarity"
+                rarityLabel.Size = UDim2.new(1,0,0.45,0)
+                rarityLabel.Position = UDim2.new(0,0,0.55,0)
+                rarityLabel.BackgroundTransparency = 1
+                rarityLabel.Text = rarity:upper()
+                rarityLabel.Font = Enum.Font.GothamBlack
+                rarityLabel.TextScaled = true
+                rarityLabel.TextColor3 = ESP_COLORS[rarity] or Color3.new(1,1,1)
+                rarityLabel.TextStrokeTransparency = 0
+                rarityLabel.TextStrokeColor3 = Color3.new(0,0,0)
+                rarityLabel.TextXAlignment = Enum.TextXAlignment.Center
+                rarityLabel.Parent = espGui
+
+                esps[pet] = espGui
+            end
+
+            local function removeESP(pet)
+                local esp = esps[pet]
+                if esp then
+                    esp:Destroy()
+                    esps[pet] = nil
+                end
+            end
+
+            local function scanFolder(folder)
+                for _, child in ipairs(folder:GetChildren()) do
+                    if child:IsA("Model") then
+                        task.spawn(createESP, child)
+                    end
+                end
+            end
+
+            -- Initial scan
+            for _, folder in ipairs(highTierFolders) do
+                scanFolder(folder)
+            end
+
+            -- Connections
+            ESP_Connection_1 = ActiveBrainrots.ChildAdded:Connect(function(newFolder)
+                if table.find(HIGH_TIERS, newFolder.Name) then
+                    table.insert(highTierFolders, newFolder)
+                    task.wait(0.5)
+                    scanFolder(newFolder)
+                end
+            end)
+
+            ESP_Connection_2 = workspace.DescendantRemoving:Connect(function(desc)
+                if desc:IsA("Model") and esps[desc] then
+                    removeESP(desc)
+                end
+            end)
+
+            -- Size cycle (E key)
+            ESP_Connection_3 = UserInputService.InputBegan:Connect(function(input, gpe)
+                if gpe then return end
+                if input.KeyCode == Enum.KeyCode.E then
+                    local sizes = {40, 60, 80, 100, 120}
+                    local idx = table.find(sizes, ESP_SIZE) or 2
+                    idx = (idx % #sizes) + 1
+                    ESP_SIZE = sizes[idx]
+
+                    for pet, esp in pairs(esps) do
+                        if esp and esp.Parent then
+                            esp.Size = UDim2.new(0, ESP_SIZE, 0, ESP_SIZE / 2)
+                            local bg = esp:FindFirstChild("BG")
+                            if bg then
+                                bg.Size = UDim2.new(1,8,1,8)
+                                bg.Position = UDim2.new(0,-4,0,-4)
+                            end
+                            local shadow = esp:FindFirstChild("Shadow")
+                            if shadow then
+                                shadow.Size = bg.Size
+                                shadow.Position = UDim2.new(0,-2,0,-2)
+                            end
+                        end
+                    end
+                    print("ESP Size →", ESP_SIZE)
+                end
+            end)
+
+            print("[ESP] Brainrot → ACTIVATED  (E = cycle size)")
+
+        else
+            -- Cleanup ESP
+            for pet, _ in pairs(esps) do
+                removeESP(pet)
+            end
+            esps = {}
+
+            if ESP_Connection_1 then ESP_Connection_1:Disconnect() end
+            if ESP_Connection_2 then ESP_Connection_2:Disconnect() end
+            if ESP_Connection_3 then ESP_Connection_3:Disconnect() end
+
+            ESP_Connection_1, ESP_Connection_2, ESP_Connection_3 = nil, nil, nil
+
+            print("[ESP] Brainrot → DEACTIVATED")
+        end
+    end
+})
+Main:AddLabel({text = "YT: ScriptZap0"})
+-- Initialize GUI
+library:Init()
+
+print("Zaporium GUI Loaded | YT: ScriptZap0 !")
