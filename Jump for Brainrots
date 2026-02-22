@@ -1,0 +1,215 @@
+-- ZAPORIUM GUI + Auto High-Rarity Farm
+
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Services
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+
+local brainrotsFolder = workspace:WaitForChild("Brainrots")
+
+-- Settings (toggles)
+local autoSecret   = false
+local autoCelestial = false
+local autoDivine    = false
+
+local totalBought = 0
+local scanCount = 0
+local scanInterval = 3          -- seconds between scans
+local noHighCount = 0
+local maxNoHighStreak = 20      -- stop after ~1 min of nothing
+
+-- Rarity helpers
+local function isHighRarity(rarityName)
+    return (rarityName == "Secret"   and autoSecret) or
+    (rarityName == "Celestial" and autoCelestial) or
+    (rarityName == "Divine"    and autoDivine)
+end
+
+local function getCharacter()
+    local char = player.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        return char
+    end
+    return nil
+end
+
+local function bypassAndTriggerPrompt(prompt)
+    local originalHold = prompt.HoldDuration
+    prompt.HoldDuration = 0
+
+    local triggered = false
+    local conn = prompt.Triggered:Connect(function(plr)
+        if plr == player then
+            triggered = true
+            conn:Disconnect()
+        end
+    end)
+
+    prompt:InputHoldBegin()
+    task.wait(0.05)
+    prompt:InputHoldEnd()
+
+    task.wait(0.3)
+    conn:Disconnect()
+
+    prompt.HoldDuration = originalHold
+    return triggered
+end
+
+-- Exploit instant version (uncomment if using executor like Synapse/Krnl)
+--[[
+local function bypassAndTriggerPrompt(prompt)
+    fireproximityprompt(prompt)
+    task.wait(0.5)
+    return true
+end
+--]]
+
+local function tryBuy(item)
+    local char = getCharacter()
+    if not char then return false end
+
+    local hrp = char.HumanoidRootPart
+    local originalCFrame = hrp.CFrame
+
+    local mesh = item:FindFirstChild("Mesh")
+    if not mesh then return false end
+
+    local prompt = mesh:FindFirstChild("ProximityPrompt")
+    if not prompt or not prompt.Enabled then return false end
+
+    print("🛒 Trying → " .. item.Name)
+
+    -- Teleport
+    local targetPos = mesh.CFrame * CFrame.new(0, 3, -5)
+    hrp.CFrame = targetPos
+    task.wait(0.3)          -- settle
+
+    task.wait(0.1)          -- small delay before trigger
+    local clientOk = bypassAndTriggerPrompt(prompt)
+
+    -- Return
+    hrp.CFrame = originalCFrame
+    task.wait(0.5)
+
+    -- Verify success by checking if item disappeared
+    task.wait(1.0)
+    local gone = not brainrotsFolder:FindFirstChild(item.Name)
+
+    if gone then
+        totalBought = totalBought + 1
+        print("✓ SUCCESS → " .. item.Name .. "  | Total: " .. totalBought)
+        return true
+    else
+        warn("✗ Failed (still exists) → " .. item.Name)
+        return false
+    end
+end
+
+local function scanAndProcess()
+    scanCount = scanCount + 1
+    print("🔍 Scan #" .. scanCount .. " starting...")
+
+    local targets = {}
+
+    for _, item in ipairs(brainrotsFolder:GetChildren()) do
+        local gui = item:FindFirstChild("Gui")
+        if not gui then continue end
+
+        local rarityFrame = gui:FindFirstChild("Rarity")
+        if not rarityFrame then continue end
+
+        for _, child in ipairs(rarityFrame:GetChildren()) do
+            local name = child.Name
+            if isHighRarity(name) then
+                table.insert(targets, item)
+                break
+            end
+        end
+    end
+
+    local boughtThisScan = 0
+
+    for _, item in ipairs(targets) do
+        if brainrotsFolder:FindFirstChild(item.Name) then
+            if tryBuy(item) then
+                boughtThisScan = boughtThisScan + 1
+            end
+            task.wait(0.7)   -- cooldown between attempts
+        end
+    end
+
+    if boughtThisScan > 0 then
+        noHighCount = 0
+        print("✅ Scan #" .. scanCount .. " | Bought " .. boughtThisScan)
+    else
+        noHighCount = noHighCount + 1
+        print("❌ Scan #" .. scanCount .. " empty (" .. noHighCount .. "/" .. maxNoHighStreak .. ")")
+
+        if noHighCount >= maxNoHighStreak then
+            print("⏹️ No high rarities found for too long → stopping loop")
+            return false   -- stop the loop
+        end
+    end
+
+    return true   -- continue
+end
+
+-- GUI Setup
+local Window = library:CreateWindow("Jump for Brainrots")
+
+local Main = Window:AddFolder("Autofarm")
+
+Main:AddToggle({
+    text = "Auto Secret",
+    state = false,
+    callback = function(value)
+        autoSecret = value
+        print("Auto Secret:", value and "ENABLED" or "DISABLED")
+    end
+})
+
+Main:AddToggle({
+    text = "Auto Celestial",
+    state = false,
+    callback = function(value)
+        autoCelestial = value
+        print("Auto Celestial:", value and "ENABLED" or "DISABLED")
+    end
+})
+
+Main:AddToggle({
+    text = "Auto Divine",
+    state = false,
+    callback = function(value)
+        autoDivine = value
+        print("Auto Divine:", value and "ENABLED" or "DISABLED")
+    end
+})
+
+Main:AddLabel({text = "YT: ScriptZap0"})
+
+library:Init()
+
+print("Zaporium GUI + Auto Farm Loaded!")
+print("Toggle the features you want to auto-buy.")
+
+-- Main farming loop (starts immediately, but only acts when toggles are on)
+spawn(function()
+    while true do
+        if not (autoSecret or autoCelestial or autoDivine) then
+            task.wait(1.5)   -- idle when all off
+            continue
+        end
+
+        local shouldContinue = scanAndProcess()
+
+        if not shouldContinue then
+            break
+        end
+
+        task.wait(scanInterval)
+    end
+end)
