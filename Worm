@@ -1,0 +1,85 @@
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Create main window
+local Window = library:CreateWindow("Become Hungry Worm")
+
+-- Main folder
+local Main = Window:AddFolder("Main Features")
+
+-- Your credit (kept inside the folder)
+
+
+-- The only feature: FOOD AURA toggle
+local auraEnabled = false
+
+Main:AddToggle({
+    text = "FOOD AURA",
+    state = false,
+    flag = "food_aura",
+    callback = function(value)
+        auraEnabled = value
+
+        if value then
+            print("FOOD AURA → Activated (worm hitbox enlargement)")
+        else
+            print("FOOD AURA → Deactivated")
+            -- Note: enlargement can't be perfectly undone in most worm games
+            -- because parts get recreated/reset frequently
+        end
+    end
+})
+Main:AddLabel({ text = "YT: ScriptZap0" })
+-- ──────────────────────────────────────────────
+--     FOOD AURA logic (enlarge your own worm)
+-- ──────────────────────────────────────────────
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+
+local multiplier = 5   -- change this value (5 = big, 8–12 = massive, 3 = moderate)
+
+spawn(function()
+    while true do
+        if not auraEnabled then
+            wait(0.4)
+            continue
+        end
+
+        local wormName = "Worm-" .. LocalPlayer.Name
+        local worm = Workspace:FindFirstChild("Worms") and Workspace.Worms:FindFirstChild(wormName)
+
+        if worm then
+            local head = worm:FindFirstChild("Head")
+            if head then
+                local importantParts = {
+                    head:FindFirstChild("Death"),
+                    head:FindFirstChild("Start"),
+                    head:FindFirstChild("NewHead"),
+                    head:FindFirstChild("WormHitbox"),
+                    head:FindFirstChild("Sweat"),     -- if your game has it
+                }
+
+                for _, part in importantParts do
+                    if part and part:IsA("BasePart") then
+                        -- Keep multiplying (works even after respawn/reset)
+                        part.Size = part.Size * Vector3.new(multiplier, multiplier, multiplier)
+
+                        -- Optional: uncomment to visualize hitbox while testing
+                        -- part.Transparency = 0.5
+                        -- part.BrickColor = BrickColor.new("Really red")
+                        -- part.Material = Enum.Material.Neon
+                    end
+                end
+            end
+        end
+
+        wait(0.25)   -- fast loop — most worm games recreate/reset parts often
+    end
+end)
+
+-- ──────────────────────────────────────────────
+
+library:Init()
+
+print("Zaporium GUI Loaded | FOOD AURA ready (YT: ScriptZap0)")
