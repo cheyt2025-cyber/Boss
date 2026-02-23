@@ -74,9 +74,10 @@ local function unlockTo(targetName)
 end
 
 local function collectBatch(area, flag)
-    if not area or not hasObjects(area) then return end
+    if not area or not hasObjects(area) or not flag then return end
+    print("[Celestial] Found objects → rushing now!")
     tweenTo(area:GetPivot() + Vector3.new(0, 4, 0), veryFastTweenInfo)
-    wait(0.2)
+    wait(0.15)  -- slightly shorter settle
     local objects = area:GetChildren()
     for _, obj in ipairs(objects) do
         if not flag then break end
@@ -86,12 +87,13 @@ local function collectBatch(area, flag)
             if prompt then
                 local targetCFrame = root.CFrame * CFrame.new(0, 2.5, -1.8)
                 tweenTo(targetCFrame, veryFastTweenInfo)
-                wait(0.1)
+                wait(0.08)
                 local hrp = getHRP()
                 if hrp then
                     fireproximityprompt(prompt)
+                    print("[Celestial] Triggered prompt on: " .. obj.Name)
                 end
-                wait(0.15)
+                wait(0.12)
             end
         end
     end
@@ -102,7 +104,7 @@ local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Z
 local Window = library:CreateWindow("Run For Brainrots")
 local Main = Window:AddFolder("Main Features")
 
--- Get Mythic Toggle
+-- Get Mythic Toggle (unchanged)
 Main:AddToggle({
     text = "Get Mythic",
     state = false,
@@ -125,7 +127,7 @@ Main:AddToggle({
     end
 })
 
--- Get Secret Toggle
+-- Get Secret Toggle (unchanged)
 Main:AddToggle({
     text = "Get Secret",
     state = false,
@@ -148,7 +150,7 @@ Main:AddToggle({
     end
 })
 
--- Get Celestial Toggle (Celestial prio + Secret fallback)
+-- Get Celestial Toggle – MODIFIED: Stays at Celestial area waiting for objects (15min CD), collects instantly, then goes home and returns to wait
 Main:AddToggle({
     text = "Get Celestial",
     state = false,
@@ -156,21 +158,37 @@ Main:AddToggle({
     callback = function(v)
         if v and not celestialLoop then
             celestialLoop = spawn(function()
+                print("[Celestial] Starting – unlocking to Secret first...")
                 unlockTo("Secret")
-                goHome()
-                wait(0.6)
-                while library.flags["GetCelestial"] do
-                    local celestial = spawners:FindFirstChild("Celestial")
-                    if celestial and hasObjects(celestial) then
-                        print("Celestial detected → batch collecting!")
-                        collectBatch(celestial, library.flags["GetCelestial"])
-                    else
-                        local secret = spawners:FindFirstChild("Secret")
-                        collectBatch(secret, library.flags["GetCelestial"])
-                    end
-                    goHome()
-                    wait(0.8)
+                
+                local celestial = waitForArea("Celestial", 10)
+                if not celestial then
+                    warn("[Celestial] Could not find Celestial area!")
+                    celestialLoop = nil
+                    return
                 end
+                
+                print("[Celestial] Celestial area found, moving there...")
+                tweenTo(celestial:GetPivot() + Vector3.new(0, 4, 0))
+                print("[Celestial] Now waiting at area for objects (super fast poll)...")
+
+                while library.flags["GetCelestial"] do
+                    if hasObjects(celestial) then
+                        print("[Celestial] Objects spawned! Collecting instantly...")
+                        collectBatch(celestial, library.flags["GetCelestial"])
+                        goHome()
+                        wait(0.8)
+                        -- Return to area for next spawn (15min CD)
+                        if library.flags["GetCelestial"] then
+                            tweenTo(celestial:GetPivot() + Vector3.new(0, 4, 0), veryFastTweenInfo)
+                            print("[Celestial] Back at area, waiting for next spawn...")
+                        end
+                    else
+                        wait(0.05)  -- Ultra-fast polling while staying at area
+                    end
+                end
+
+                print("[Celestial] Toggle turned OFF – stopping loop")
                 celestialLoop = nil
             end)
         end
@@ -181,4 +199,4 @@ Main:AddLabel({text = "Made by Zappisme"})
 
 library:Init()
 
-print("Zaporium GUI Loaded! Toggles now cycle FOREVER when ON.")
+print("Zaporium GUI Loaded! Get Celestial now STAYS at the area waiting for spawns, collects instantly, goes home, then returns to wait.")
