@@ -1,0 +1,184 @@
+local player = game.Players.LocalPlayer
+local tweenService = game:GetService("TweenService")
+
+local fastTweenInfo = TweenInfo.new(0.8, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+local veryFastTweenInfo = TweenInfo.new(0.4, Enum.EasingStyle.Linear)
+
+local homeCFrame = CFrame.new(-16.01, 26.31, -489.64)
+local spawners = workspace:WaitForChild("ItemSpawners")
+local unlockRarities = {"Uncommon", "Rare", "Epic", "Legendary", "Mythical", "Secret"}
+
+local mythicLoop, secretLoop, celestialLoop = nil, nil, nil
+
+local function getHRP()
+    local char = player.Character
+    if char and char.Parent then
+        return char:FindFirstChild("HumanoidRootPart")
+    end
+end
+
+local function goHome()
+    local hrp = getHRP()
+    if hrp then
+        hrp.CFrame = homeCFrame
+    end
+end
+
+local function tweenTo(targetCFrame, customInfo)
+    local hrp = getHRP()
+    if not hrp then return end
+    local info = customInfo or fastTweenInfo
+    local tween = tweenService:Create(hrp, info, {CFrame = targetCFrame})
+    tween:Play()
+    tween.Completed:Wait()
+end
+
+local function hasObjects(area)
+    if not area then return false end
+    for _, child in ipairs(area:GetChildren()) do
+        local root = child:FindFirstChild("RootPart")
+        if root and root:FindFirstChildOfClass("ProximityPrompt") then
+            return true
+        end
+    end
+    return false
+end
+
+local function waitForArea(name, timeout)
+    timeout = timeout or 10
+    local start = tick()
+    repeat wait(0.1) until spawners:FindFirstChild(name) or (tick() - start > timeout)
+    return spawners:FindFirstChild(name)
+end
+
+local function unlockTo(targetName)
+    local targetIndex
+    for i, name in ipairs(unlockRarities) do
+        if name == targetName then
+            targetIndex = i
+            break
+        end
+    end
+    if not targetIndex then return end
+    for i = 1, targetIndex do
+        local name = unlockRarities[i]
+        local area = waitForArea(name, 10)
+        if not area then
+            warn("Could not unlock: " .. name)
+            return
+        end
+        local targetCFrame = area:GetPivot() + Vector3.new(0, 4, 0)
+        tweenTo(targetCFrame)
+        wait(0.4)
+    end
+end
+
+local function collectBatch(area, flag)
+    if not area or not hasObjects(area) then return end
+    tweenTo(area:GetPivot() + Vector3.new(0, 4, 0), veryFastTweenInfo)
+    wait(0.2)
+    local objects = area:GetChildren()
+    for _, obj in ipairs(objects) do
+        if not flag then break end
+        local root = obj:FindFirstChild("RootPart")
+        if root then
+            local prompt = root:FindFirstChildOfClass("ProximityPrompt")
+            if prompt then
+                local targetCFrame = root.CFrame * CFrame.new(0, 2.5, -1.8)
+                tweenTo(targetCFrame, veryFastTweenInfo)
+                wait(0.1)
+                local hrp = getHRP()
+                if hrp then
+                    fireproximityprompt(prompt)
+                end
+                wait(0.15)
+            end
+        end
+    end
+end
+
+-- Load GUI Library
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+local Window = library:CreateWindow("Zaporium GUI")
+local Main = Window:AddFolder("Main Features")
+
+-- Get Mythic Toggle
+Main:AddToggle({
+    text = "Get Mythic",
+    state = false,
+    flag = "GetMythic",
+    callback = function(v)
+        if v and not mythicLoop then
+            mythicLoop = spawn(function()
+                unlockTo("Mythical")
+                goHome()
+                wait(0.6)
+                while library.flags["GetMythic"] do
+                    local area = spawners:FindFirstChild("Mythical")
+                    collectBatch(area, library.flags["GetMythic"])
+                    goHome()
+                    wait(0.8)
+                end
+                mythicLoop = nil
+            end)
+        end
+    end
+})
+
+-- Get Secret Toggle
+Main:AddToggle({
+    text = "Get Secret",
+    state = false,
+    flag = "GetSecret",
+    callback = function(v)
+        if v and not secretLoop then
+            secretLoop = spawn(function()
+                unlockTo("Secret")
+                goHome()
+                wait(0.6)
+                while library.flags["GetSecret"] do
+                    local area = spawners:FindFirstChild("Secret")
+                    collectBatch(area, library.flags["GetSecret"])
+                    goHome()
+                    wait(0.8)
+                end
+                secretLoop = nil
+            end)
+        end
+    end
+})
+
+-- Get Celestial Toggle (Celestial prio + Secret fallback)
+Main:AddToggle({
+    text = "Get Celestial",
+    state = false,
+    flag = "GetCelestial",
+    callback = function(v)
+        if v and not celestialLoop then
+            celestialLoop = spawn(function()
+                unlockTo("Secret")
+                goHome()
+                wait(0.6)
+                while library.flags["GetCelestial"] do
+                    local celestial = spawners:FindFirstChild("Celestial")
+                    if celestial and hasObjects(celestial) then
+                        print("Celestial detected → batch collecting!")
+                        collectBatch(celestial, library.flags["GetCelestial"])
+                    else
+                        local secret = spawners:FindFirstChild("Secret")
+                        collectBatch(secret, library.flags["GetCelestial"])
+                    end
+                    goHome()
+                    wait(0.8)
+                end
+                celestialLoop = nil
+            end)
+        end
+    end
+})
+
+Main:AddLabel({text = "Made by Zappisme"})
+
+library:Init()
+
+print("Zaporium GUI Loaded! Toggles now cycle FOREVER when ON.")
