@@ -99,7 +99,7 @@ end
 
 -- Load GUI Library
 local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
-local Window = library:CreateWindow("Zaporium GUI")
+local Window = library:CreateWindow("Run For Brainrots")
 local Main = Window:AddFolder("Main Features")
 
 -- Get Mythic Toggle
