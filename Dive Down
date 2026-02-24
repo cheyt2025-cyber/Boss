@@ -1,0 +1,199 @@
+-- Fisch High-Rarity Auto-Teleport + Auto-Trigger + Return Home Script
+-- Faster timings (2026 edition) - USE AT OWN RISK — high ban probability
+-- Targets: Mythical/Secret/Divine (any CPS) + anything >=10k CPS
+-- GUI: Zaporium with Instant Catch toggle
+
+local player = game.Players.LocalPlayer
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+--                          GUI SETUP (Zaporium)
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+local Window = library:CreateWindow("Dive Down")
+
+local Main = Window:AddFolder("Main Features")
+
+local farmingEnabled = false
+
+Main:AddToggle({
+    text = "Instant Catch",
+    state = false,
+    flag = "instantcatch",
+    callback = function(value)
+        farmingEnabled = value
+        if value then
+            print("Instant Catch → Enabled")
+        else
+            print("Instant Catch → Disabled")
+        end
+    end
+})
+
+Main:AddLabel({text = "Mythic/Secret/Divine"})
+
+Main:AddLabel({text = "Made by Zappisme"})
+
+library:Init()
+
+print("Zaporium GUI Loaded | Instant Catch ready")
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+--                          FARMING LOGIC
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+-- Character handling
+local function updateCharacter()
+    local character = player.Character or player.CharacterAdded:Wait()
+    return character:WaitForChild("HumanoidRootPart")
+end
+
+local hrp = updateCharacter()
+player.CharacterAdded:Connect(function()
+    task.wait(1)
+    hrp = updateCharacter()
+end)
+
+-- Game paths
+local fishesFolder = workspace:WaitForChild("Game"):WaitForChild("Fishes")
+local atlantisZone = workspace:WaitForChild("Game"):WaitForChild("FishZones"):WaitForChild("Atlantis")
+
+-- Config
+local targetRarities = {"Mythical", "Secret", "Divine"}
+local MIN_CPS = 10000
+
+-- Home position
+local HOME_CFRAME = CFrame.new(-1857.32, 2538.49, -1423.30)
+
+-- Tunable timings
+local DELAY_ATLANTIS_CHECK   = 1.1 + math.random() * 1.1     -- ~1.1–2.2s
+local DELAY_AFTER_TELEPORT   = 0.13 + math.random() * 0.18   -- ~0.13–0.31s
+local DELAY_AFTER_PROMPT     = 0.95 + math.random() * 0.7    -- ~0.95–1.65s   (riskiest)
+local COOLDOWN_AFTER_CATCH   = 2.8 + math.random() * 2.2     -- ~2.8–5.0s
+local MAIN_LOOP_DELAY        = 1.3 + math.random() * 1.3     -- ~1.3–2.6s
+
+-- Helpers
+local function isUUID(name)
+    return string.match(name, "^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$") ~= nil
+end
+
+local function getBillboardPart(fish)
+    for _, child in ipairs(fish:GetChildren()) do
+        if child:IsA("BasePart") and string.find(string.lower(child.Name), "billboard") then
+            return child
+        end
+    end
+    return nil
+end
+
+local function parseCashPerSec(text)
+    if not text or text == "" then return 0 end
+    local cleaned = string.gsub(text:lower(), "/s", ""):gsub(" ", "")
+    local numStr, suffix = string.match(cleaned, "([%d%.]+)([km]?)")
+    if not numStr then return 0 end
+    local num = tonumber(numStr) or 0
+    if suffix == "k" then num = num * 1000
+    elseif suffix == "m" then num = num * 1000000 end
+    return num
+end
+
+local function teleportTo(cframe)
+    if hrp and hrp.Parent then
+        hrp.CFrame = cframe
+    end
+end
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+--                          MAIN FARMING LOOP
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+task.spawn(function()
+    while true do
+        if not farmingEnabled then
+            task.wait(0.8)
+            continue
+        end
+
+        -- Go to Atlantis zone
+        if atlantisZone then
+            local targetCF = atlantisZone:IsA("BasePart") and atlantisZone.CFrame
+            or (atlantisZone.PrimaryPart and atlantisZone.PrimaryPart.CFrame)
+            or atlantisZone:GetPivot()
+
+            teleportTo(targetCF + Vector3.new(
+            math.random(-5,5), 8, math.random(-5,5)
+            ))
+        end
+
+        task.wait(DELAY_ATLANTIS_CHECK)
+
+        local caught = false
+
+        for _, fish in ipairs(fishesFolder:GetChildren()) do
+            if caught then break end
+            if isUUID(fish.Name) or not fish:FindFirstChild("RootPart") then continue end
+
+            local billboardPart = getBillboardPart(fish)
+            if not billboardPart then continue end
+
+            local gui = billboardPart:FindFirstChild("BillboardGui")
+            if not gui then continue end
+
+            local frame = gui:FindFirstChild("Frame")
+            if not frame then continue end
+
+            local rarityLabel = frame:FindFirstChild("Rarity")
+            local cashLabel = frame:FindFirstChild("CashPerSec") or frame:FindFirstChild("CashPerSec", true)
+
+            local rarityText = rarityLabel and rarityLabel.Text or ""
+            local cpsText = ""
+            if cashLabel then
+                if cashLabel:IsA("GuiObject") then
+                    cpsText = cashLabel.Text or ""
+                elseif cashLabel:FindFirstChildOfClass("TextLabel") then
+                    cpsText = cashLabel:FindFirstChildOfClass("TextLabel").Text or ""
+                end
+            end
+
+            local cpsNum = parseCashPerSec(cpsText)
+
+            local isTargetRarity = false
+            for _, r in ipairs(targetRarities) do
+                if string.find(rarityText:lower(), r:lower()) then
+                    isTargetRarity = true
+                    break
+                end
+            end
+
+            if isTargetRarity or cpsNum >= MIN_CPS then
+                print("High-value fish → " .. fish.Name .. " | " .. rarityText .. " | " .. cpsNum .. " CPS")
+
+                -- Teleport to fish
+                teleportTo(fish.RootPart.CFrame + Vector3.new(
+                math.random(-2,2), 4, math.random(-2,2)
+                ))
+                task.wait(DELAY_AFTER_TELEPORT)
+
+                -- Trigger prompt
+                local prompt = fish.RootPart:FindFirstChildOfClass("ProximityPrompt")
+                if prompt then
+                    fireproximityprompt(prompt)
+                end
+
+                task.wait(DELAY_AFTER_PROMPT)
+
+                -- Return home
+                teleportTo(HOME_CFRAME + Vector3.new(
+                math.random(-4,4), math.random(1,3), math.random(-4,4)
+                ))
+
+                print("Caught & returned home: " .. fish.Name)
+                task.wait(COOLDOWN_AFTER_CATCH)
+                caught = true  -- only one per cycle
+            end
+        end
+
+        task.wait(MAIN_LOOP_DELAY)
+    end
+end)
