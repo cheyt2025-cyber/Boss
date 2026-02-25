@@ -1,0 +1,217 @@
+-- Roblox Script: FPS Back Lock Shooter + Zaporium GUI
+-- Mobile Godmode: Camera locked on head, ignores lobby players, auto-off in lobby.
+-- Toggle: "Back shot" in Main Features
+
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Create main window
+local Window = library:CreateWindow("Pistol Arena")
+
+-- Main folder
+local Main = Window:AddFolder("Main Features")
+
+-- The only toggle
+local backShotEnabled = false
+
+Main:AddToggle({
+    text = "Back shot",
+    state = false,
+    callback = function(value)
+        backShotEnabled = value
+        if not value then
+            -- Clean shutdown when turning OFF
+            if followConnection then
+                followConnection:Disconnect()
+                followConnection = nil
+            end
+            currentTarget = nil
+            resetCamera()
+        end
+        -- When turned ON, the main loop will pick it up automatically
+    end
+})
+
+-- Your credit
+Main:AddLabel({text = "Made by Zappisme"})
+
+-- Initialize GUI
+library:Init()
+
+print("Zaporium GUI Loaded | Back shot toggle ready!")
+
+-- ────────────────────────────────────────────────
+--                  BACK SHOT LOGIC
+-- ────────────────────────────────────────────────
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+
+local Camera = Workspace.CurrentCamera
+local DISTANCE = 4       -- studs behind (closer = easier headshots)
+local HEIGHT_OFFSET = 0
+
+-- LOBBY DETECTION
+local lobbyModel = Workspace:FindFirstChild("Lobby")
+local lobbyCenter = nil
+local LOBBY_RADIUS = 200  -- adjust this radius
+
+if lobbyModel then
+    if lobbyModel:IsA("Model") then
+        pcall(function()
+            lobbyCenter = lobbyModel:GetPivot().Position
+        end)
+    elseif lobbyModel:IsA("BasePart") then
+        lobbyCenter = lobbyModel.Position
+    end
+    if lobbyCenter then
+        print("Lobby detected at", lobbyCenter, "- Radius:", LOBBY_RADIUS)
+    end
+end
+
+local function isInLobby(plr)
+    if not lobbyCenter then return false end
+    local char = plr.Character
+    if not char then return false end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    return (hrp.Position - lobbyCenter).Magnitude <= LOBBY_RADIUS
+end
+
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+
+-- Player tracking for cycling
+local otherPlayers = {}
+local currentIndex = 1
+
+local function updatePlayerList()
+    otherPlayers = {}
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            table.insert(otherPlayers, player)
+        end
+    end
+end
+
+updatePlayerList()
+Players.PlayerAdded:Connect(updatePlayerList)
+Players.PlayerRemoving:Connect(updatePlayerList)
+
+-- Follow system
+local followConnection = nil
+local currentTarget = nil
+
+local function isTargetAlive(target)
+    return target and target.Character
+    and target.Character:FindFirstChild("HumanoidRootPart")
+    and target.Character:FindFirstChild("Humanoid")
+    and target.Character.Humanoid.Health > 0
+end
+
+local function resetCamera()
+    Camera.CameraType = Enum.CameraType.Custom
+end
+
+local function followTarget(target)
+    if followConnection then
+        followConnection:Disconnect()
+    end
+    currentTarget = target
+    Camera.CameraType = Enum.CameraType.Scriptable
+    followConnection = RunService.Heartbeat:Connect(function()
+        if not backShotEnabled or not isTargetAlive(target) or isInLobby(LocalPlayer) or isInLobby(target) then
+            followConnection:Disconnect()
+            followConnection = nil
+            currentTarget = nil
+            resetCamera()
+            return
+        end
+
+        local targetHRP = target.Character.HumanoidRootPart
+        local targetHead = target.Character:FindFirstChild("Head")
+        local myHRP = HumanoidRootPart
+        local myHead = Character:FindFirstChild("Head")
+
+        -- Noclip
+        myHRP.CanCollide = false
+
+        -- Position behind target
+        local targetPos = targetHRP.Position
+        local lookVector = targetHRP.CFrame.LookVector
+        local myPos = targetPos + Vector3.new(0, HEIGHT_OFFSET, 0) - (lookVector * DISTANCE)
+
+        -- Face their back
+        myHRP.CFrame = CFrame.lookAt(myPos, targetPos)
+
+        -- Camera lock on THEIR head
+        local myEyePos = myHead and myHead.Position or (myHRP.Position + Vector3.new(0, 2, 0))
+        local targetLookPos = targetHead and targetHead.Position or (targetHRP.Position + Vector3.new(0, 1.5, 0))
+        Camera.CFrame = CFrame.lookAt(myEyePos, targetLookPos)
+    end)
+end
+
+-- Respawn handler
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    Character = newChar
+    HumanoidRootPart = newChar:WaitForChild("HumanoidRootPart")
+    wait(0.5)
+    resetCamera()
+    if backShotEnabled and currentTarget and isTargetAlive(currentTarget) and not isInLobby(LocalPlayer) and not isInLobby(currentTarget) then
+        followTarget(currentTarget)
+    end
+end)
+
+-- Main loop: cycles targets one-by-one, respects toggle & lobby
+spawn(function()
+    while true do
+        wait(0.1)
+
+        if not backShotEnabled or isInLobby(LocalPlayer) then
+            if followConnection then
+                followConnection:Disconnect()
+                followConnection = nil
+            end
+            currentTarget = nil
+            resetCamera()
+            continue
+        end
+
+        if #otherPlayers == 0 then
+            resetCamera()
+            continue
+        end
+
+        local found = false
+        for i = 1, #otherPlayers do
+            local index = (currentIndex + i - 2) % #otherPlayers + 1
+            local target = otherPlayers[index]
+            if isTargetAlive(target) and not isInLobby(target) then
+                followTarget(target)
+                currentIndex = index
+                found = true
+                break
+            end
+        end
+
+        if not found then
+            resetCamera()
+        else
+            -- Wait until current target dies or conditions fail
+            repeat
+                wait(0.1)
+            until not backShotEnabled or not isTargetAlive(currentTarget) or isInLobby(LocalPlayer) or isInLobby(currentTarget)
+
+            if followConnection then
+                followConnection:Disconnect()
+                followConnection = nil
+            end
+            currentTarget = nil
+            resetCamera()
+        end
+    end
+end)
+
+print("🚀 Back Shot (toggle) ready! Turn ON in GUI → lock & frag! 💀")
+print("Lobby radius:", LOBBY_RADIUS, "- Tune if needed.")
