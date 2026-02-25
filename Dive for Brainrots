@@ -1,0 +1,217 @@
+-- ZAPORIUM GUI - Auto-loop "Get OG" (farms forever while ON)
+
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+local Window = library:CreateWindow("Dive for Brainrot")
+local Main = Window:AddFolder("Main Features")
+
+-- Global farm control
+local isFarming = false
+local farmConnection = nil
+
+-- Your EXACT farm function (unchanged logic, wrapped for looping)
+local function runFarmCycle()
+    local Players = game:GetService("Players")
+    local TweenService = game:GetService("TweenService")
+    local RunService = game:GetService("RunService")
+
+    local player = Players.LocalPlayer
+    local character = player.Character or player.CharacterAdded:Wait()
+    local hrp = character:WaitForChild("HumanoidRootPart", 8)
+    local humanoid = character:WaitForChild("Humanoid")
+
+    if not hrp or not humanoid then
+        warn("No HumanoidRootPart or Humanoid found")
+        return
+    end
+
+    local homeCFrame  = CFrame.new(-13.92, 7623.78, -42.61)
+    local farmAreaCFrame = CFrame.new(-5.63, 6749.22, 3409.20)
+
+    -- Phase 1
+    print("Teleporting to farm area...")
+    hrp.CFrame = farmAreaCFrame
+
+    print("Waiting 5 seconds for objects to settle...")
+    for i = 5, 1, -1 do
+        print("   → " .. i .. "s remaining")
+        task.wait(1)
+    end
+    print("Settle complete → looking for spawners")
+
+    -- Phase 2
+    local itemSpawners = workspace:FindFirstChild("ItemSpawners")
+    if not itemSpawners then
+        warn("ItemSpawners not found")
+        hrp.CFrame = homeCFrame
+        return
+    end
+
+    local og = itemSpawners:FindFirstChild("OG")
+    if not og then
+        warn("OG not found")
+        hrp.CFrame = homeCFrame
+        return
+    end
+
+    local maxTries = 20
+    local spawner = nil
+
+    for try = 1, maxTries do
+        local children = og:GetChildren()
+        print("OG children: " .. #children .. " (try " .. try .. "/" .. maxTries .. ")")
+
+        if #children >= 6 then
+            spawner = children[6]
+
+            print("Anchoring all spawners...")
+            for _, child in ipairs(children) do
+                local root = child:FindFirstChild("RootPart")
+                if root and root:IsA("BasePart") then
+                    root.Anchored = true
+                    root.Velocity = Vector3.new(0,0,0)
+                    root.RotVelocity = Vector3.new(0,0,0)
+                    print("   → Anchored: " .. child.Name)
+                end
+            end
+
+            break
+        end
+        task.wait(0.4)
+    end
+
+    if not spawner then
+        warn("No 6th spawner found")
+        hrp.CFrame = homeCFrame
+        return
+    end
+
+    print("Target: " .. spawner.Name)
+
+    local rootPart = spawner:FindFirstChild("RootPart")
+    local prompt = rootPart and rootPart:FindFirstChild("ProximityPrompt")
+
+    if not rootPart or not prompt then
+        warn("Missing RootPart or Prompt")
+        hrp.CFrame = homeCFrame
+        return
+    end
+
+    -- Phase 3
+    print("🚀 Starting real-time follow + auto-trigger...")
+
+    humanoid.PlatformStand = true
+
+    local bodyPos = Instance.new("BodyPosition")
+    bodyPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    bodyPos.P = 5000
+    bodyPos.D = 1000
+    bodyPos.Parent = hrp
+
+    local bodyGyro = Instance.new("BodyGyro")
+    bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    bodyGyro.P = 5000
+    bodyGyro.D = 1000
+    bodyGyro.Parent = hrp
+
+    local startTime = tick()
+    local maxFollowTime = 12
+    local triggerCooldown = 0.25
+    local lastTriggerTime = 0
+    local connection = nil
+
+    local function onSuccess()
+        print("✅ SUCCESS DETECTED → TP HOME IMMEDIATELY!")
+        if connection then
+            connection:Disconnect()
+            connection = nil
+        end
+        bodyPos:Destroy()
+        bodyGyro:Destroy()
+        humanoid.PlatformStand = false
+        task.wait(0.1)
+        hrp.CFrame = homeCFrame
+        print("🏠 Back home FAST!")
+    end
+
+    connection = RunService.Heartbeat:Connect(function()
+        if not hrp.Parent or not humanoid.Parent then
+            onSuccess()
+            return
+        end
+
+        if tick() - startTime > maxFollowTime then
+            print("⏰ Follow timeout")
+            onSuccess()
+            return
+        end
+
+        if not rootPart.Parent or not prompt.Parent then
+            print("Object or prompt destroyed → PICKUP SUCCESS!")
+            onSuccess()
+            return
+        end
+
+        local offset = rootPart.CFrame.LookVector * -5 + Vector3.new(0, 4, 0)
+        local targetPos = rootPart.Position + offset
+        bodyPos.Position = targetPos
+        bodyGyro.CFrame = CFrame.lookAt(targetPos, rootPart.Position)
+
+        if tick() - lastTriggerTime >= triggerCooldown and prompt.Enabled then
+            fireproximityprompt(prompt)
+            lastTriggerTime = tick()
+            print("🔥 Trigger attempt...")
+        end
+
+        if not prompt.Enabled then
+            print("✅ Prompt disabled → SUCCESS!")
+            onSuccess()
+            return
+        end
+    end)
+
+    task.delay(maxFollowTime + 2, function()
+        if connection then
+            print("Safety timeout")
+            onSuccess()
+        end
+    end)
+
+    print("✅ Cycle complete!")
+end
+
+-- Toggle: Auto-farms FOREVER while ON
+Main:AddToggle({
+    text = "Get OG",
+    state = false,
+    flag = "get_og",
+    callback = function(enabled)
+        isFarming = enabled
+
+        if enabled then
+            print("[Get OG] ON → Auto-farming FOREVER started!")
+
+            -- Background infinite loop (non-blocking)
+            farmConnection = task.spawn(function()
+                while isFarming do
+                    pcall(runFarmCycle)  -- pcall catches errors, continues looping
+                    if isFarming then
+                        task.wait(1.5)  -- 1.5s delay at home between cycles (adjust if needed)
+                    end
+                end
+                print("[Get OG] Loop stopped")
+            end)
+        else
+            print("[Get OG] OFF → Stopping auto-farm...")
+            -- Loop stops naturally via isFarming check
+            farmConnection = nil
+        end
+    end
+})
+
+-- Credit
+Main:AddLabel({text = "Made by Zappisme"})
+
+library:Init()
+
+print("Zaporium GUI Loaded! Toggle 'Get OG' ON for infinite farming.")
