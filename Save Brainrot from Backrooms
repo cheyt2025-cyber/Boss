@@ -1,0 +1,167 @@
+-- ZAPORIUM GUI - Save Brainrot (Cleaned)
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Create main window
+local Window = library:CreateWindow("Save Brainrot from Backrooms")
+
+-- Main folder
+local Main = Window:AddFolder("Main Features")
+
+-- === CORE AUTO-COLLECT LOGIC (GODLY → OP priority + Y-lock falling) ===
+local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local SPAWN_X, SPAWN_Z = 67.93, 2142.74
+local SAFE_Y = -2.0
+local HOME_CFRAME = CFrame.new(-16.02, 9.35, 23.30)
+local TWEEN_INFO = TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+local yLockConnection = nil
+local isFarming = false
+local godlyPriority = true   -- "OP/GODLY" toggle controls this
+
+local function startYLock(hrp)
+    if yLockConnection then yLockConnection:Disconnect() end
+    yLockConnection = RunService.Heartbeat:Connect(function()
+        if hrp and hrp.Parent then
+            local pos = hrp.Position
+            hrp.CFrame = CFrame.new(pos.X, SAFE_Y, pos.Z) * hrp.CFrame.Rotation
+            hrp.AssemblyLinearVelocity = Vector3.new(
+            hrp.AssemblyLinearVelocity.X * 0.7,
+            -15,
+            hrp.AssemblyLinearVelocity.Z * 0.7
+            )
+        end
+    end)
+end
+
+local function stopYLock()
+    if yLockConnection then
+        yLockConnection:Disconnect()
+        yLockConnection = nil
+    end
+end
+
+local function tweenTo(targetCFrame)
+    local character = player.Character or player.CharacterAdded:Wait()
+    local hrp = character:WaitForChild("HumanoidRootPart")
+    local fixedTarget = CFrame.new(targetCFrame.Position.X, SAFE_Y, targetCFrame.Position.Z) * targetCFrame.Rotation
+    local tween = TweenService:Create(hrp, TWEEN_INFO, {CFrame = fixedTarget})
+    tween:Play()
+    tween.Completed:Wait()
+end
+
+local function oneCollectCycle()
+    local character = player.Character
+    if not character then return end
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    local humanoid = character:FindFirstChild("Humanoid")
+    if not hrp or not humanoid then return end
+
+    startYLock(hrp)
+    humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+
+    -- 1. Go to spawner area
+    tweenTo(CFrame.new(SPAWN_X, SAFE_Y, SPAWN_Z))
+    task.wait(1.0)
+
+    -- 2. PRIORITY: Godly first → OP #2
+    local itemSpawners = workspace:WaitForChild("ItemSpawners")
+    local targetItem = nil
+
+    if godlyPriority then
+        local godlyFolder = itemSpawners:FindFirstChild("Godly")
+        if godlyFolder and #godlyFolder:GetChildren() > 0 then
+            targetItem = godlyFolder:GetChildren()[1]
+            print("🎉 GODLY SPAWNED! Taking highest value item...")
+        end
+    end
+
+    if not targetItem then
+        local opFolder = itemSpawners:FindFirstChild("Op")
+        if opFolder then
+            local opObjects = opFolder:GetChildren()
+            targetItem = (#opObjects >= 2) and opObjects[2] or (#opObjects > 0 and opObjects[1] or nil)
+            if targetItem then
+                print("✅ Targeting OP item")
+            end
+        end
+    end
+
+    if not targetItem then
+        stopYLock()
+        return
+    end
+
+    local rootPart = targetItem:FindFirstChild("RootPart")
+    if not rootPart then stopYLock() return end
+
+    local prompt = rootPart:FindFirstChildOfClass("ProximityPrompt")
+    if not prompt then stopYLock() return end
+
+    -- 3. Go exactly under the object
+    local rootPos = rootPart.Position
+    local itemCFrame = CFrame.lookAt(Vector3.new(rootPos.X, SAFE_Y, rootPos.Z), rootPos)
+    tweenTo(itemCFrame)
+    task.wait(0.4)
+
+    -- 4. FORCE trigger prompt
+    prompt.MaxActivationDistance = 100
+    prompt.RequiresLineOfSight = false
+    prompt.HoldDuration = 0
+    prompt.Enabled = true
+
+    for i = 1, 3 do
+        prompt:InputHoldBegin()
+        task.wait(0.28)
+        prompt:InputHoldEnd()
+        task.wait(0.18)
+    end
+
+    task.wait(1.4)
+
+    -- 5. Return home
+    stopYLock()
+    humanoid:ChangeState(Enum.HumanoidStateType.Running)
+    tweenTo(HOME_CFRAME)
+end
+
+-- === GUI TOGGLES ===
+Main:AddToggle({
+    text = "Save Brainrot",
+    state = false,
+    flag = "savebrainrot",
+    callback = function(state)
+        isFarming = state
+        if state then
+            task.spawn(function()
+                print("🚀 Save Brainrot (OP/GODLY) AUTO-FARM STARTED!")
+                while isFarming do
+                    oneCollectCycle()
+                    task.wait(1.5) -- small delay between cycles (adjust if needed)
+                end
+                print("⛔ Save Brainrot stopped")
+            end)
+        end
+    end
+})
+
+-- Under "Save Brainrot"
+Main:AddToggle({
+    text = "OP/GODLY",
+    state = true,
+    flag = "opgodly",
+    callback = function(state)
+        godlyPriority = state
+        print("Priority set to:", state and "GODLY (first)" or "OP only")
+    end
+})
+
+-- Credit (under Main Features folder)
+Main:AddLabel({text = "Made by Zappisme"})
+
+-- Init GUI
+library:Init()
+print("✅ Zaporium GUI Loaded! (Save Brainrot + OP/GODLY)")
