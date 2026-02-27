@@ -1,215 +1,228 @@
--- ZAPORIUM GUI + Auto High-Rarity Farm
+-- Zaporium GUI + Separate Auto Collectors (Divine / Celestial / Secret + Plot Auto Collect)
 
 local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
 
--- Services
-local Players = game:GetService("Players")
-local player = Players.LocalPlayer
-local RunService = game:GetService("RunService")
-
-local brainrotsFolder = workspace:WaitForChild("Brainrots")
-
--- Settings (toggles)
-local autoSecret   = false
-local autoCelestial = false
-local autoDivine    = false
-
-local totalBought = 0
-local scanCount = 0
-local scanInterval = 3          -- seconds between scans
-local noHighCount = 0
-local maxNoHighStreak = 20      -- stop after ~1 min of nothing
-
--- Rarity helpers
-local function isHighRarity(rarityName)
-    return (rarityName == "Secret"   and autoSecret) or
-    (rarityName == "Celestial" and autoCelestial) or
-    (rarityName == "Divine"    and autoDivine)
-end
-
-local function getCharacter()
-    local char = player.Character
-    if char and char:FindFirstChild("HumanoidRootPart") then
-        return char
-    end
-    return nil
-end
-
-local function bypassAndTriggerPrompt(prompt)
-    local originalHold = prompt.HoldDuration
-    prompt.HoldDuration = 0
-
-    local triggered = false
-    local conn = prompt.Triggered:Connect(function(plr)
-        if plr == player then
-            triggered = true
-            conn:Disconnect()
-        end
-    end)
-
-    prompt:InputHoldBegin()
-    task.wait(0.05)
-    prompt:InputHoldEnd()
-
-    task.wait(0.3)
-    conn:Disconnect()
-
-    prompt.HoldDuration = originalHold
-    return triggered
-end
-
--- Exploit instant version (uncomment if using executor like Synapse/Krnl)
---[[
-local function bypassAndTriggerPrompt(prompt)
-    fireproximityprompt(prompt)
-    task.wait(0.5)
-    return true
-end
---]]
-
-local function tryBuy(item)
-    local char = getCharacter()
-    if not char then return false end
-
-    local hrp = char.HumanoidRootPart
-    local originalCFrame = hrp.CFrame
-
-    local mesh = item:FindFirstChild("Mesh")
-    if not mesh then return false end
-
-    local prompt = mesh:FindFirstChild("ProximityPrompt")
-    if not prompt or not prompt.Enabled then return false end
-
-    print("🛒 Trying → " .. item.Name)
-
-    -- Teleport
-    local targetPos = mesh.CFrame * CFrame.new(0, 3, -5)
-    hrp.CFrame = targetPos
-    task.wait(0.3)          -- settle
-
-    task.wait(0.1)          -- small delay before trigger
-    local clientOk = bypassAndTriggerPrompt(prompt)
-
-    -- Return
-    hrp.CFrame = originalCFrame
-    task.wait(0.5)
-
-    -- Verify success by checking if item disappeared
-    task.wait(1.0)
-    local gone = not brainrotsFolder:FindFirstChild(item.Name)
-
-    if gone then
-        totalBought = totalBought + 1
-        print("✓ SUCCESS → " .. item.Name .. "  | Total: " .. totalBought)
-        return true
-    else
-        warn("✗ Failed (still exists) → " .. item.Name)
-        return false
-    end
-end
-
-local function scanAndProcess()
-    scanCount = scanCount + 1
-    print("🔍 Scan #" .. scanCount .. " starting...")
-
-    local targets = {}
-
-    for _, item in ipairs(brainrotsFolder:GetChildren()) do
-        local gui = item:FindFirstChild("Gui")
-        if not gui then continue end
-
-        local rarityFrame = gui:FindFirstChild("Rarity")
-        if not rarityFrame then continue end
-
-        for _, child in ipairs(rarityFrame:GetChildren()) do
-            local name = child.Name
-            if isHighRarity(name) then
-                table.insert(targets, item)
-                break
-            end
-        end
-    end
-
-    local boughtThisScan = 0
-
-    for _, item in ipairs(targets) do
-        if brainrotsFolder:FindFirstChild(item.Name) then
-            if tryBuy(item) then
-                boughtThisScan = boughtThisScan + 1
-            end
-            task.wait(0.7)   -- cooldown between attempts
-        end
-    end
-
-    if boughtThisScan > 0 then
-        noHighCount = 0
-        print("✅ Scan #" .. scanCount .. " | Bought " .. boughtThisScan)
-    else
-        noHighCount = noHighCount + 1
-        print("❌ Scan #" .. scanCount .. " empty (" .. noHighCount .. "/" .. maxNoHighStreak .. ")")
-
-        if noHighCount >= maxNoHighStreak then
-            print("⏹️ No high rarities found for too long → stopping loop")
-            return false   -- stop the loop
-        end
-    end
-
-    return true   -- continue
-end
-
--- GUI Setup
 local Window = library:CreateWindow("Jump for Brainrots")
+local Main = Window:AddFolder("Main Features")
 
-local Main = Window:AddFolder("Autofarm")
+-- ──────────────────────────────────────────────────────────────
+-- Toggles state table
+-- ──────────────────────────────────────────────────────────────
+local toggles = {
+    Divine    = false,
+    Celestial = false,
+    Secret    = false,
+    AutoCollect = false   -- new toggle
+}
+
+-- ──────────────────────────────────────────────────────────────
+-- GUI Toggles
+-- ──────────────────────────────────────────────────────────────
 
 Main:AddToggle({
-    text = "Auto Secret",
+    text = "Auto Divine",
     state = false,
-    callback = function(value)
-        autoSecret = value
-        print("Auto Secret:", value and "ENABLED" or "DISABLED")
+    callback = function(v)
+        toggles.Divine = v
+        print("Auto Divine:", v and "ENABLED" or "DISABLED")
     end
 })
 
 Main:AddToggle({
     text = "Auto Celestial",
     state = false,
-    callback = function(value)
-        autoCelestial = value
-        print("Auto Celestial:", value and "ENABLED" or "DISABLED")
+    callback = function(v)
+        toggles.Celestial = v
+        print("Auto Celestial:", v and "ENABLED" or "DISABLED")
     end
 })
 
 Main:AddToggle({
-    text = "Auto Divine",
+    text = "Auto Secret",
     state = false,
-    callback = function(value)
-        autoDivine = value
-        print("Auto Divine:", value and "ENABLED" or "DISABLED")
+    callback = function(v)
+        toggles.Secret = v
+        print("Auto Secret:", v and "ENABLED" or "DISABLED")
     end
 })
 
-Main:AddLabel({text = "YT: ScriptZap0"})
+-- ── NEW TOGGLE ───────────────────────────────────────────────────
+Main:AddToggle({
+    text = "Auto Collect",
+    state = false,
+    callback = function(v)
+        toggles.AutoCollect = v
+        print("Auto Collect (plot buttons):", v and "ENABLED" or "DISABLED")
+    end
+})
 
-library:Init()
+-- Credit
+Main:AddLabel({text = "Made by Zappisme"})
 
-print("Zaporium GUI + Auto Farm Loaded!")
-print("Toggle the features you want to auto-buy.")
+-- ──────────────────────────────────────────────────────────────
+-- Brainrot Rarity Collector Logic (unchanged)
+-- ──────────────────────────────────────────────────────────────
 
--- Main farming loop (starts immediately, but only acts when toggles are on)
+local player = game.Players.LocalPlayer
+local homeCFrame = CFrame.new(-15.57, 9.97, -150.17)
+
+local function teleportHome()
+    local char = player.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        char.HumanoidRootPart.CFrame = homeCFrame
+    end
+end
+
+local function getRarityPrio(rarityFolder, targetRarity)
+    return rarityFolder:FindFirstChild(targetRarity) and true or false
+end
+
+local function findClosestOfRarity(targetRarity)
+    local folder = workspace:WaitForChild("Brainrots")
+    local char = player.Character
+    local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return nil end
+
+    local best = nil
+    local bestDist = math.huge
+
+    for _, brainrot in ipairs(folder:GetChildren()) do
+        if not brainrot:IsA("Model") then continue end
+
+        local mesh = brainrot:FindFirstChild("Mesh")
+        if not mesh or not mesh:IsA("BasePart") then continue end
+
+        local gui = brainrot:FindFirstChild("BrainrotGui", true)
+        if not gui then continue end
+
+        local rarityFolder = gui:FindFirstChild("Rarity")
+        if not rarityFolder then continue end
+
+        if getRarityPrio(rarityFolder, targetRarity) then
+            local dist = (mesh.Position - rootPart.Position).Magnitude
+            if dist < bestDist then
+                bestDist = dist
+                best = {mesh = mesh, brainrot = brainrot, dist = dist}
+            end
+        end
+    end
+
+    return best
+end
+
+local function collectTarget(targetData)
+    if not targetData then return false end
+    local mesh = targetData.mesh
+    local prompt = mesh:FindFirstChildWhichIsA("ProximityPrompt")
+    if not prompt then return false end
+
+    prompt.HoldDuration = 0
+    prompt.RequiresLineOfSight = false
+    prompt.MaxActivationDistance = math.huge
+
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if root then
+        local above = mesh.Position + Vector3.new(0, 5, 0)
+        root.CFrame = CFrame.lookAt(above, mesh.Position)
+        task.wait(0.15)
+    end
+
+    prompt:InputHoldBegin()
+    task.wait(0.1)
+    prompt:InputHoldEnd()
+
+    task.wait(0.4)
+    return true
+end
+
+local function createRarityCollectorLoop(rarityName)
+    spawn(function()
+        while true do
+            if not toggles[rarityName] then
+                task.wait(0.8)
+                continue
+            end
+
+            local target = findClosestOfRarity(rarityName)
+            if target then
+                print(string.format("🎯 %s → %s (dist %.1f)", rarityName, target.brainrot.Name, target.dist))
+                if collectTarget(target) then
+                    print("   └─ Collected → homing")
+                end
+                teleportHome()
+            end
+
+            task.wait(0.6)
+        end
+    end)
+end
+
+-- Start rarity loops
+createRarityCollectorLoop("Divine")
+createRarityCollectorLoop("Celestial")
+createRarityCollectorLoop("Secret")
+
+-- ──────────────────────────────────────────────────────────────
+-- NEW: Plot Auto Collect (CollectButtons TouchInterests)
+-- ──────────────────────────────────────────────────────────────
+
+local PlotsFolder = workspace:WaitForChild("Plots")
+local MY_PLOT = nil
+local COLLECT_DELAY = 0.65   -- adjust if needed (lower = faster, but might lag/kick risk)
+
+-- Find your plot (runs once, waits until found)
 spawn(function()
-    while true do
-        if not (autoSecret or autoCelestial or autoDivine) then
-            task.wait(1.5)   -- idle when all off
-            continue
+    while not MY_PLOT do
+        for _, plot in ipairs(PlotsFolder:GetChildren()) do
+            local ownerVal = plot:FindFirstChild("Owner")
+            if ownerVal and ownerVal.Value == player then
+                MY_PLOT = plot
+                print("✅ Your plot detected → " .. plot.Name)
+                break
+            end
         end
-
-        local shouldContinue = scanAndProcess()
-
-        if not shouldContinue then
-            break
+        if not MY_PLOT then
+            task.wait(2.5)
         end
-
-        task.wait(scanInterval)
     end
 end)
+
+-- Auto collect loop for plot buttons
+spawn(function()
+    while true do
+        task.wait(COLLECT_DELAY)
+
+        if not toggles.AutoCollect then continue end
+        if not MY_PLOT then continue end
+
+        local buttonsFolder = MY_PLOT:FindFirstChild("CollectButtons")
+        if not buttonsFolder then continue end
+
+        local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if not root then continue end
+
+        local count = 0
+
+        for _, button in ipairs(buttonsFolder:GetChildren()) do
+            local ti = button:FindFirstChild("TouchInterest")
+            if ti and ti:IsA("TouchTransmitter") then
+                firetouchinterest(root, button, 0)
+                task.wait(0.025)
+                firetouchinterest(root, button, 1)
+                count = count + 1
+            end
+        end
+
+        if count > 0 then
+            print("Collected " .. count .. " buttons in " .. MY_PLOT.Name)
+        end
+    end
+end)
+
+-- ──────────────────────────────────────────────────────────────
+-- Final init
+-- ──────────────────────────────────────────────────────────────
+
+library:Init()
+print("Zaporium GUI Loaded | Features: Auto Divine / Celestial / Secret / Collect")
