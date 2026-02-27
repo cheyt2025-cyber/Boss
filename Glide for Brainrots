@@ -1,0 +1,214 @@
+-- Zaporium GUI + Selective Auto-Steal (with respawn/death fix)
+
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+local Window = library:CreateWindow("Glide for Brainrots")
+local Main = Window:AddFolder("Main Features")
+
+-- Toggle states
+local autoLucky  = false
+local autoChroma = false
+local autoSecret = false
+
+-- Safe/home positions
+local SAFE_ZONE = CFrame.new(-8091.12, -1.90, -381.62)
+local HOME_BASE = CFrame.new(-153.01, 3.00, -354.46)
+
+-- We'll define these globals but refresh them on respawn
+local player = game.Players.LocalPlayer
+local stealableFolder = nil     -- set later
+local currentHRP = nil
+
+-- Function to refresh character/folder references (call on spawn)
+local function refreshReferences()
+    local char = player.Character or player.CharacterAdded:Wait()
+    currentHRP = char:WaitForChild("HumanoidRootPart", 8)
+
+    if not currentHRP then
+        warn("[AutoSteal] No HumanoidRootPart after spawn")
+        return false
+    end
+
+    stealableFolder = workspace:WaitForChild("StealableItems", 8)
+    if not stealableFolder then
+        warn("[AutoSteal] StealableItems folder not found")
+        return false
+    end
+
+    print("[AutoSteal] References refreshed - ready")
+    return true
+end
+
+-- Initial setup
+refreshReferences()
+
+-- Listen for respawns (critical!)
+player.CharacterAdded:Connect(function()
+    task.wait(0.5)  -- small delay for character to fully load
+    refreshReferences()
+end)
+
+local function teleportTo(cf)
+    if currentHRP and currentHRP.Parent then
+        currentHRP.CFrame = cf
+        task.wait(0.18)
+    end
+end
+
+local function tryStealItem(item)
+    if not currentHRP then return false end
+
+    local hitbox = item:FindFirstChild("Hitbox", true)
+    if not hitbox then return false end
+
+    local prompt = hitbox:FindFirstChild("InGameStealPrompt")
+    if not prompt then return false end
+
+    if prompt:IsA("ProximityPrompt") then
+        fireproximityprompt(prompt)
+        return true
+    end
+
+    -- fallback
+    local pos = (hitbox:IsA("BasePart") and hitbox.Position) or hitbox:GetPivot().Position
+    teleportTo(CFrame.new(pos + Vector3.new(0, 3.5, 0)))
+    task.wait(0.45)
+
+    local vim = game:GetService("VirtualInputManager")
+    vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+    task.wait(0.07)
+    vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+
+    return true
+end
+
+local function getCustomRarity(item)
+    for _, desc in ipairs(item:GetDescendants()) do
+        if desc:IsA("BasePart") or desc:IsA("MeshPart") then
+            local n = desc.Name:lower()
+            if n:find("luckyblock") or desc.Name == "Luckyblock3_Cube.013" then
+                return "Lucky Block"
+            end
+        end
+    end
+
+    local bb = item:FindFirstChild("InGamePetBillboard")
+    if not bb then return nil end
+
+    local r = bb:FindFirstChild("Rarity")
+    if not r then return nil end
+
+    if r:IsA("StringValue") then return r.Value end
+    if r:IsA("TextLabel") or r:IsA("TextButton") then return r.Text end
+    return nil
+end
+
+local function processItem(item)
+    if not stealableFolder then return end
+    if not (item:IsA("Model") or item:IsA("Folder")) then return end
+    if item.Parent ~= stealableFolder then return end
+
+    local rarity = getCustomRarity(item)
+    if not rarity then return end
+
+    local shouldSteal = false
+    if rarity == "Lucky Block" and autoLucky   then shouldSteal = true end
+    if rarity == "Chroma"     and autoChroma  then shouldSteal = true end
+    if rarity == "Secret"     and autoSecret  then shouldSteal = true end
+
+    if not shouldSteal then return end
+
+    if not currentHRP then
+        warn("[AutoSteal] No HRP - skipping " .. item.Name)
+        return
+    end
+
+    warn("★ AUTO STEALING → " .. item.Name .. " (" .. rarity .. ")")
+
+    local part = item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart", true)
+    if not part then
+        warn("No valid part on " .. item.Name)
+        return
+    end
+
+    teleportTo(part.CFrame * CFrame.new(0, 4.5, 0))
+    task.wait(0.7)
+
+    local success = tryStealItem(item)
+    task.wait(1.3)
+
+    if success then
+        teleportTo(SAFE_ZONE)
+        task.wait(0.9)
+        teleportTo(HOME_BASE)
+        warn("→ Success: " .. item.Name .. " stolen & escaped")
+    else
+        warn("→ Failed steal on " .. item.Name)
+    end
+end
+
+-- Toggle callbacks (now safe)
+Main:AddToggle({
+    text = "Auto Lucky Block",
+    state = false,
+    callback = function(value)
+        autoLucky = value
+        if value and stealableFolder then
+            print("[Auto] Lucky Block → Enabled - Scanning existing...")
+            for _, item in ipairs(stealableFolder:GetChildren()) do
+                task.spawn(processItem, item)
+            end
+        elseif value then
+            warn("[Auto] Lucky Block → Enabled but folder not ready yet")
+        else
+            print("[Auto] Lucky Block → Disabled")
+        end
+    end
+})
+
+Main:AddToggle({
+    text = "Auto Chroma",
+    state = false,
+    callback = function(value)
+        autoChroma = value
+        if value and stealableFolder then
+            print("[Auto] Chroma → Enabled - Scanning existing...")
+            for _, item in ipairs(stealableFolder:GetChildren()) do
+                task.spawn(processItem, item)
+            end
+        elseif value then
+            warn("[Auto] Chroma → Enabled but folder not ready yet")
+        else
+            print("[Auto] Chroma → Disabled")
+        end
+    end
+})
+
+Main:AddToggle({
+    text = "Auto Secret",
+    state = false,
+    callback = function(value)
+        autoSecret = value
+        if value and stealableFolder then
+            print("[Auto] Secret → Enabled - Scanning existing...")
+            for _, item in ipairs(stealableFolder:GetChildren()) do
+                task.spawn(processItem, item)
+            end
+        elseif value then
+            warn("[Auto] Secret → Enabled but folder not ready yet")
+        else
+            print("[Auto] Secret → Disabled")
+        end
+    end
+})
+
+Main:AddLabel({text = "Made by Zappisme"})
+
+-- Always monitor new items (checks toggles inside processItem)
+stealableFolder.ChildAdded:Connect(function(child)
+    task.wait(0.5)
+    processItem(child)
+end)
+
+library:Init()
+print("Zaporium GUI + Auto Farm (respawn-safe) Loaded!")
