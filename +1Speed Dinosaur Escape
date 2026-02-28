@@ -1,0 +1,121 @@
+-- ZAPORIUM GUI - Updated (Farm Wins loops every ~1s)
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Create main window
+local Window = library:CreateWindow("+1Speed Dinosaur Escape")
+
+-- Main folder
+local Main = Window:AddFolder("Main Features")
+
+-- Your credit
+
+
+-- ── Infinite Speed Toggle ──
+local infSpeedConnection
+Main:AddToggle({
+    text = "Inf Speed",
+    state = false,
+    flag = "infspeed",
+    callback = function(enabled)
+        if enabled then
+            if not infSpeedConnection then
+                infSpeedConnection = game:GetService("RunService").Heartbeat:Connect(function()
+                    local args = {"PlayerStepAdd"}
+                    local event = game:GetService("ReplicatedStorage")
+                    :WaitForChild("Packages")
+                    :WaitForChild("EventBus")
+                    :WaitForChild("RemoteEvent")
+                    pcall(function()
+                        event:FireServer(unpack(args))
+                    end)
+                end)
+            end
+            print("Infinite Speed → ON")
+        else
+            if infSpeedConnection then
+                infSpeedConnection:Disconnect()
+                infSpeedConnection = nil
+            end
+            print("Infinite Speed → OFF")
+        end
+    end
+})
+
+-- ── Farm Wins (TP to Cup 17 + auto jump) Toggle ──
+local farmThread
+Main:AddToggle({
+    text = "Farm Wins",
+    state = false,
+    flag = "farmwins",
+    callback = function(enabled)
+        if enabled then
+            print("Farm Wins (Cup 17) → STARTED (looping every ~1s)")
+
+            -- Stop any old thread first
+            if farmThread then
+                coroutine.close(farmThread)
+                farmThread = nil
+            end
+
+            farmThread = coroutine.create(function()
+                while library.flags.farmwins do  -- checks toggle state every loop
+                    pcall(function()
+                        local player = game.Players.LocalPlayer
+                        local character = player.Character
+                        if not character then return end
+
+                        local hrp = character:FindFirstChild("HumanoidRootPart")
+                        local humanoid = character:FindFirstChild("Humanoid")
+                        if not hrp or not humanoid or humanoid.Health <= 0 then return end
+
+                        local getCups = workspace:FindFirstChild("GetCups")
+                        if not getCups then return end
+
+                        local cupModel = getCups:FindFirstChild("17")
+                        if not cupModel then return end
+
+                        -- Teleport
+                        local cupPivot = cupModel:GetPivot()
+                        hrp.CFrame = cupPivot * CFrame.new(0, 3, 0)
+
+                        -- Jump
+                        task.wait(0.06)
+                        if humanoid and humanoid.Parent then
+                            humanoid.Jump = true
+                        end
+
+                        -- Dino drag (if exists)
+                        task.wait(0.12)
+                        local dinoFolder = workspace:FindFirstChild("ERKINGS22")
+                        if dinoFolder then
+                            local dino = dinoFolder:FindFirstChild("RideDinosaur")
+                            if dino then
+                                local dinoRoot = dino:FindFirstChild("RootPart") or dino:FindFirstChildWhichIsA("BasePart")
+                                if dinoRoot then
+                                    dinoRoot.CFrame = hrp.CFrame * CFrame.new(0, -2.5, 3)
+                                end
+                            end
+                        end
+                    end)
+
+                    task.wait(2)  -- main delay - every 1 second
+                end
+            end)
+
+            coroutine.resume(farmThread)
+
+        else
+            print("Farm Wins (Cup 17) → STOPPED")
+            if farmThread then
+                coroutine.close(farmThread)
+                farmThread = nil
+            end
+        end
+    end
+})
+Main:AddLabel({text = "Made by Zappisme"})
+
+-- Initialize GUI
+library:Init()
+
+print("Zaporium GUI Loaded! (Farm Wins loops every 1s)")
