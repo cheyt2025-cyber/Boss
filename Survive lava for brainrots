@@ -1,5 +1,6 @@
-
+-- LocalScript (StarterPlayerScripts) - Auto-Claimer + Status + Cheese Event + Remove Lava + Auto Collect
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local hrp = character:WaitForChild("HumanoidRootPart", 10)
@@ -7,13 +8,14 @@ local humanoid = character:WaitForChild("Humanoid", 10)
 if not hrp or not humanoid then return end
 
 local BrainrotsFolder = workspace:WaitForChild("GameFolder"):WaitForChild("Brainrots")
-local CheeseFolder   = workspace:WaitForChild("GameFolder"):WaitForChild("CheeseFolder")
-local LavasFolder    = workspace:WaitForChild("GameFolder"):WaitForChild("Lavas")
+local CheeseFolder    = workspace:WaitForChild("GameFolder"):WaitForChild("CheeseFolder")
+local LavasFolder     = workspace:WaitForChild("GameFolder"):WaitForChild("Lavas")
+local PlotsFolder     = workspace:WaitForChild("GameFolder"):WaitForChild("Plots")
 
 -- HOME POSITION
 local HOME_CFRAME = CFrame.new(15.32, 22.74, 27.24)
 
--- Toggle states for auto-claim
+-- Toggle states
 local enabledRarities = {
     Epic      = false,
     Legendary = false,
@@ -24,6 +26,107 @@ local enabledRarities = {
 }
 
 local autoCheeseEnabled = false
+local autoCollectEnabled = false
+
+-- ────────────────────────────────────────────────
+-- AUTO COLLECT (Plots → Places → Claim)
+-- ────────────────────────────────────────────────
+
+local myPlot
+
+local function detectPlot()
+    for _, plot in ipairs(PlotsFolder:GetChildren()) do
+        local att = plot:FindFirstChild("YourBaseAtt")
+        if not att then continue end
+        
+        local gui = att:FindFirstChild("BillboardGui")
+        if not gui then continue end
+        
+        local title = gui:FindFirstChild("Title")
+        if title and title.Text == "YOUR BASE" then
+            return plot
+        end
+    end
+    return nil
+end
+
+-- One-time plot detection
+task.spawn(function()
+    repeat
+        task.wait(0.3)
+        myPlot = detectPlot()
+    until myPlot or not player.Parent  -- safety
+    if myPlot then
+        print("🗺️ My plot detected:", myPlot.Name)
+    else
+        warn("Could not find YOUR BASE plot")
+    end
+end)
+
+local function getHRP()
+    local char = player.Character
+    if char then
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if root then return root end
+    end
+    return player.CharacterAdded:Wait():WaitForChild("HumanoidRootPart", 8)
+end
+
+local function claimAll()
+    if not myPlot then 
+        print("⚠️ Plot not detected yet — skipping claim cycle")
+        return 
+    end
+    
+    local placesFolder = myPlot:FindFirstChild("Places")
+    if not placesFolder then 
+        print("⚠️ Places folder not found in plot")
+        return 
+    end
+    
+    local currentHRP = getHRP()
+    if not currentHRP then return end
+    
+    local children = placesFolder:GetChildren()
+    if #children == 0 then return end
+    
+    print("🔄 Found", #children, "places — starting claims...")
+    
+    for i, place in ipairs(children) do
+        local claimPart = place:FindFirstChild("Claim")
+        if not claimPart or not claimPart:IsA("BasePart") then
+            continue
+        end
+        
+        firetouchinterest(currentHRP, claimPart, 0)
+        task.wait()
+        firetouchinterest(currentHRP, claimPart, 1)
+        
+        if i % 5 == 0 then
+            task.wait(0.15)
+        end
+        
+        if i % 10 == 0 then
+            print("Claimed", i, "/", #children)
+        end
+    end
+    
+    print("✅ Claim cycle finished!")
+end
+
+-- Auto collect loop when enabled
+task.spawn(function()
+    while true do
+        if autoCollectEnabled and myPlot then
+            claimAll()
+        end
+        task.wait(5.5)  -- adjust this delay: 4–8 seconds recommended
+    end
+end)
+
+-- ────────────────────────────────────────────────
+-- BRAINROT / CHEESE FUNCTIONS (unchanged)
+-- ────────────────────────────────────────────────
 
 local function isTargetRarity(text)
     return enabledRarities[text] == true
@@ -142,8 +245,8 @@ local function scanAndClaim()
     print("🔥 CYCLE DONE\n")
 end
 
--- Cheese event connection (always listening, checks enabled inside)
-local spawnConn = CheeseFolder.ChildAdded:Connect(function(obj)
+-- Cheese spawn watcher
+CheeseFolder.ChildAdded:Connect(function(obj)
     task.spawn(function()
         task.wait(0.3)
         if autoCheeseEnabled and obj.Parent and hrp and hrp.Parent and humanoid.Health > 0 then
@@ -153,8 +256,9 @@ local spawnConn = CheeseFolder.ChildAdded:Connect(function(obj)
 end)
 
 -- ────────────────────────────────────────────────
--- STATUS INDICATOR (toggled by button)
+-- STATUS GUI (unchanged)
 -- ────────────────────────────────────────────────
+
 local statusGuiVisible = false
 local statusScreenGui = Instance.new("ScreenGui")
 statusScreenGui.Name = "BrainrotsStatus"
@@ -260,7 +364,6 @@ local function updateStatusGUI()
     end
 end
 
--- Status update loop
 task.spawn(function()
     while true do
         task.wait(1.4)
@@ -273,10 +376,12 @@ end)
 -- ────────────────────────────────────────────────
 -- GUI (Zaporium)
 -- ────────────────────────────────────────────────
+
 local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
 local Window = library:CreateWindow("Survive Lava for Brainrots")
 
 local Main = Window:AddFolder("Main Features")
+
 Main:AddToggle({text = "Get Epic",      state = false, callback = function(v) enabledRarities.Epic      = v print("Get Epic:",      v and "ON" or "OFF") end})
 Main:AddToggle({text = "Get Legendary", state = false, callback = function(v) enabledRarities.Legendary = v print("Get Legendary:", v and "ON" or "OFF") end})
 Main:AddToggle({text = "Get Mythic",    state = false, callback = function(v) enabledRarities.Mythic    = v print("Get Mythic:",    v and "ON" or "OFF") end})
@@ -298,9 +403,21 @@ Main:AddButton({
     end
 })
 
+Main:AddToggle({
+    text = "Auto Collect",
+    state = false,
+    callback = function(v)
+        autoCollectEnabled = v
+        print("🔄 Auto Collect:", v and "ON" or "OFF")
+        if v and myPlot then
+            task.spawn(claimAll)  -- run once immediately when turning on
+        end
+    end
+})
+
 Main:AddLabel({text = "YT: ScriptZap0"})
 
--- 🧀 CHEESE EVENT FOLDER
+-- Cheese Event folder
 local CheeseEvent = Window:AddFolder("Cheese Event")
 
 CheeseEvent:AddToggle({
@@ -333,11 +450,12 @@ CheeseEvent:AddButton({
 })
 
 library:Init()
-print("Zaporium GUI + Status + Auto Cheese + Remove Lava Loaded")
+print("GUI + Auto Cheese + Remove Lava + Auto Collect Loaded")
 
 -- ────────────────────────────────────────────────
--- AUTO-CLAIM LOOP
+-- AUTO BRAINROT CLAIM LOOP
 -- ────────────────────────────────────────────────
+
 task.wait(4)
 task.spawn(scanAndClaim)
 
