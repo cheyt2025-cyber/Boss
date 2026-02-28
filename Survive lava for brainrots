@@ -1,14 +1,14 @@
--- LocalScript (StarterPlayerScripts) - Auto-Claimer + Integrated Status Toggle
 
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local hrp = character:WaitForChild("HumanoidRootPart", 10)
 local humanoid = character:WaitForChild("Humanoid", 10)
-
 if not hrp or not humanoid then return end
 
 local BrainrotsFolder = workspace:WaitForChild("GameFolder"):WaitForChild("Brainrots")
+local CheeseFolder   = workspace:WaitForChild("GameFolder"):WaitForChild("CheeseFolder")
+local LavasFolder    = workspace:WaitForChild("GameFolder"):WaitForChild("Lavas")
 
 -- HOME POSITION
 local HOME_CFRAME = CFrame.new(15.32, 22.74, 27.24)
@@ -22,6 +22,8 @@ local enabledRarities = {
     Celestial = false,
     Divine    = false,
 }
+
+local autoCheeseEnabled = false
 
 local function isTargetRarity(text)
     return enabledRarities[text] == true
@@ -41,13 +43,47 @@ local function getRarity(model)
     return text
 end
 
+local function getTargetCFrame(obj)
+    if obj:IsA("BasePart") then
+        return obj.CFrame
+    elseif obj.PrimaryPart then
+        return obj.PrimaryPart.CFrame
+    else
+        local part = obj:FindFirstChildWhichIsA("BasePart", true)
+        if part then
+            return part.CFrame
+        end
+    end
+    return nil
+end
+
+local function teleportTo(obj, label)
+    if not hrp or not hrp.Parent or humanoid.Health <= 0 or not autoCheeseEnabled then return end
+    local targetCFrame = getTargetCFrame(obj)
+    if targetCFrame then
+        hrp.CFrame = targetCFrame + Vector3.new(0, 3, 0)
+        print("🧀 " .. (label or "?") .. " → " .. obj.Name)
+        task.wait(1.2)
+    end
+end
+
+local function sweepCheeses()
+    if not autoCheeseEnabled or not hrp or not hrp.Parent or humanoid.Health <= 0 then return end
+    print("🧀 Initial sweep of current cheeses...")
+    local cheeses = CheeseFolder:GetChildren()
+    for i, obj in ipairs(cheeses) do
+        teleportTo(obj, "#" .. i)
+    end
+    print("✅ Cheese sweep completed!")
+end
+
 local function simulateHoldAndTrigger(prompt)
     if not prompt or not prompt.Parent then return false end
-    print("   ⏱️ Starting hold (" .. prompt.HoldDuration .. "s)")
+    print(" ⏱️ Starting hold (" .. prompt.HoldDuration .. "s)")
     prompt:InputHoldBegin()
     task.wait(prompt.HoldDuration + 0.4)
     prompt:InputHoldEnd()
-    print("   ⏱️ Hold released")
+    print(" ⏱️ Hold released")
     task.wait(1.0)
     return not prompt.Parent or not prompt.Enabled
 end
@@ -55,33 +91,24 @@ end
 local function tryClaimBrainrot(model)
     local root = model:FindFirstChild("RootPart")
     if not root then print("❌ No RootPart: " .. model.Name) return false end
-
     local prompt = root:FindFirstChildWhichIsA("ProximityPrompt")
     if not prompt then print("❌ No Prompt: " .. model.Name) return false end
-
     local rarity = getRarity(model)
-    print("🎯 CLAIMING: " .. model:GetFullName() .. " (" .. rarity .. ")")
-
+    print("🎯 CLAIMING: " .. model:GetFullName() .. " (" .. (rarity or "???") .. ")")
     hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
     hrp.AssemblyAngularVelocity = Vector3.new(0,0,0)
-
     local safeHeight = 3.8
     local abovePos = root.Position + Vector3.new(math.random(-5,5)/10, safeHeight, math.random(-5,5)/10)
     hrp.CFrame = CFrame.lookAt(abovePos, root.Position)
-
-    print("   📍 Teleported above (dist ≈ " .. string.format("%.1f", (hrp.Position - root.Position).Magnitude) .. ")")
-
+    print(" 📍 Teleported above (dist ≈ " .. string.format("%.1f", (hrp.Position - root.Position).Magnitude) .. ")")
     task.wait(0.5)
     hrp.Anchored = true
-    print("   🔒 Anchored")
-
+    print(" 🔒 Anchored")
     local success = simulateHoldAndTrigger(prompt)
-
     hrp.Anchored = false
     task.wait(0.15)
     hrp.CFrame = HOME_CFRAME
-    print("   🏠 Returned home")
-
+    print(" 🏠 Returned home")
     if success then
         print("✅ SUCCESS: " .. model.Name)
         return true
@@ -93,14 +120,11 @@ end
 
 local function scanAndClaim()
     if not hrp or not hrp.Parent or humanoid.Health <= 0 then return end
-
     local anyEnabled = false
     for _, v in pairs(enabledRarities) do if v then anyEnabled = true break end end
     if not anyEnabled then return end
-
     print("\n🔍 SCAN (one per cycle)")
     local claimed = false
-
     for _, cat in ipairs(BrainrotsFolder:GetChildren()) do
         if cat:IsA("Folder") and not claimed then
             for _, model in ipairs(cat:GetChildren()) do
@@ -114,20 +138,28 @@ local function scanAndClaim()
         end
         if claimed then break end
     end
-
-    if not claimed then print("   No matching rarity found this cycle") end
+    if not claimed then print(" No matching rarity found this cycle") end
     print("🔥 CYCLE DONE\n")
 end
 
--- ────────────────────────────────────────────────
---                 STATUS INDICATOR (toggled by button)
--- ────────────────────────────────────────────────
+-- Cheese event connection (always listening, checks enabled inside)
+local spawnConn = CheeseFolder.ChildAdded:Connect(function(obj)
+    task.spawn(function()
+        task.wait(0.3)
+        if autoCheeseEnabled and obj.Parent and hrp and hrp.Parent and humanoid.Health > 0 then
+            teleportTo(obj, "NEW")
+        end
+    end)
+end)
 
+-- ────────────────────────────────────────────────
+-- STATUS INDICATOR (toggled by button)
+-- ────────────────────────────────────────────────
 local statusGuiVisible = false
 local statusScreenGui = Instance.new("ScreenGui")
 statusScreenGui.Name = "BrainrotsStatus"
 statusScreenGui.ResetOnSpawn = false
-statusScreenGui.Enabled = false  -- hidden by default
+statusScreenGui.Enabled = false
 statusScreenGui.Parent = player:WaitForChild("PlayerGui")
 
 local MainFrame = Instance.new("Frame")
@@ -198,20 +230,17 @@ local function updateStatusGUI()
     StatusContainer:ClearAllChildren()
     local entries = {
         {rarity = "Secret",    color = Color3.fromRGB(180, 100, 255)},
-        {rarity = "Celestial", color = Color3.fromRGB(0,   220, 255)},
+        {rarity = "Celestial", color = Color3.fromRGB(0, 220, 255)},
         {rarity = "Godly",     color = Color3.fromRGB(255, 215, 0)}
     }
-
     local spacing = 28
     for i, data in ipairs(entries) do
         local count = scanRarities()[data.rarity] or 0
-
         local entry = Instance.new("Frame")
         entry.Size = UDim2.new(1, 0, 0, spacing)
         entry.Position = UDim2.new(0, 0, 0, (i-1)*(spacing+2))
         entry.BackgroundTransparency = 1
         entry.Parent = StatusContainer
-
         local label = Instance.new("TextLabel")
         label.Size = UDim2.new(1, -12, 1, 0)
         label.Position = UDim2.new(0, 6, 0, 0)
@@ -223,7 +252,6 @@ local function updateStatusGUI()
         label.TextXAlignment = Enum.TextXAlignment.Left
         label.TextYAlignment = Enum.TextYAlignment.Center
         label.Parent = entry
-
         local glow = Instance.new("UIStroke")
         glow.Color = count > 0 and data.color or Color3.fromRGB(70, 70, 90)
         glow.Thickness = count > 0 and 1.4 or 0.8
@@ -232,7 +260,7 @@ local function updateStatusGUI()
     end
 end
 
--- Status update loop (only when visible)
+-- Status update loop
 task.spawn(function()
     while true do
         task.wait(1.4)
@@ -243,30 +271,26 @@ task.spawn(function()
 end)
 
 -- ────────────────────────────────────────────────
---                      GUI (Zaporium)
+-- GUI (Zaporium)
 -- ────────────────────────────────────────────────
-
 local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
-
 local Window = library:CreateWindow("Survive Lava for Brainrots")
 
 local Main = Window:AddFolder("Main Features")
-
-Main:AddToggle({text = "Get Epic",      state = false, callback = function(v) enabledRarities.Epic = v      print("Get Epic:", v and "ON" or "OFF") end})
+Main:AddToggle({text = "Get Epic",      state = false, callback = function(v) enabledRarities.Epic      = v print("Get Epic:",      v and "ON" or "OFF") end})
 Main:AddToggle({text = "Get Legendary", state = false, callback = function(v) enabledRarities.Legendary = v print("Get Legendary:", v and "ON" or "OFF") end})
-Main:AddToggle({text = "Get Mythic",    state = false, callback = function(v) enabledRarities.Mythic = v    print("Get Mythic:", v and "ON" or "OFF") end})
-Main:AddToggle({text = "Get Secret",    state = false, callback = function(v) enabledRarities.Secret = v    print("Get Secret:", v and "ON" or "OFF") end})
+Main:AddToggle({text = "Get Mythic",    state = false, callback = function(v) enabledRarities.Mythic    = v print("Get Mythic:",    v and "ON" or "OFF") end})
+Main:AddToggle({text = "Get Secret",    state = false, callback = function(v) enabledRarities.Secret    = v print("Get Secret:",    v and "ON" or "OFF") end})
 Main:AddToggle({text = "Get Celestial", state = false, callback = function(v) enabledRarities.Celestial = v print("Get Celestial:", v and "ON" or "OFF") end})
-Main:AddToggle({text = "Get Divine",    state = false, callback = function(v) enabledRarities.Divine = v    print("Get Divine:", v and "ON" or "OFF") end})
+Main:AddToggle({text = "Get Divine",    state = false, callback = function(v) enabledRarities.Divine    = v print("Get Divine:",    v and "ON" or "OFF") end})
 
--- Status toggle button
 Main:AddButton({
     text = "Status",
     callback = function()
         statusGuiVisible = not statusGuiVisible
         statusScreenGui.Enabled = statusGuiVisible
         if statusGuiVisible then
-            updateStatusGUI()  -- immediate refresh when opening
+            updateStatusGUI()
             print("Status panel → ON")
         else
             print("Status panel → OFF")
@@ -276,14 +300,44 @@ Main:AddButton({
 
 Main:AddLabel({text = "YT: ScriptZap0"})
 
+-- 🧀 CHEESE EVENT FOLDER
+local CheeseEvent = Window:AddFolder("Cheese Event")
+
+CheeseEvent:AddToggle({
+    text = "Auto Cheese",
+    state = false,
+    callback = function(v)
+        autoCheeseEnabled = v
+        print("🧀 Auto Cheese:", v and "ON" or "OFF")
+        if v then
+            sweepCheeses()
+        end
+    end
+})
+
+CheeseEvent:AddButton({
+    text = "Remove Lava",
+    callback = function()
+        print("🔥 Removing lava parts 1–8...")
+        for i = 1, 8 do
+            local lava = LavasFolder:FindFirstChild(tostring(i))
+            if lava then
+                lava:Destroy()
+                print("Destroyed lava #" .. i)
+            else
+                print("Lava #" .. i .. " not found → skipped")
+            end
+        end
+        print("Remove Lava finished.")
+    end
+})
+
 library:Init()
-
-print("Zaporium GUI + Status Toggle Loaded")
+print("Zaporium GUI + Status + Auto Cheese + Remove Lava Loaded")
 
 -- ────────────────────────────────────────────────
---                 AUTO-CLAIM LOOP
+-- AUTO-CLAIM LOOP
 -- ────────────────────────────────────────────────
-
 task.wait(4)
 task.spawn(scanAndClaim)
 
@@ -307,4 +361,8 @@ player.CharacterAdded:Connect(function(newChar)
     humanoid = newChar:WaitForChild("Humanoid", 10)
     task.wait(4)
     print("🔄 Respawned")
+    if autoCheeseEnabled then
+        task.wait(0.5)
+        sweepCheeses()
+    end
 end)
