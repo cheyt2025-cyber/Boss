@@ -1,0 +1,218 @@
+-- ZAPORIUM GUI - Cleaned & Modified (Auto Celestial + Auto God)
+
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Create main window
+local Window = library:CreateWindow("Jump to Steal Brainrots")
+
+-- Main folder
+local Main = Window:AddFolder("Main Features")
+
+-- ────────────────────────────────────────────────
+-- Toggles
+-- ────────────────────────────────────────────────
+
+local AutoCelestialEnabled = false
+local AutoGodEnabled       = false
+
+Main:AddToggle({
+    text = "Auto Celestial",
+    state = false,
+    flag = "autocelestial",
+    callback = function(value)
+        AutoCelestialEnabled = value
+        print("Auto Celestial:", value and "ENABLED" or "DISABLED")
+    end
+})
+
+Main:AddToggle({
+    text = "Auto God",
+    state = false,
+    flag = "autogod",
+    callback = function(value)
+        AutoGodEnabled = value
+        print("Auto God:", value and "ENABLED" or "DISABLED")
+    end
+})
+
+-- Credit label (at the bottom of Main Features)
+Main:AddLabel({text = "Made by Zappisme"})
+
+-- ────────────────────────────────────────────────
+-- Auto-Collect Logic (runs only when toggles are on)
+-- ────────────────────────────────────────────────
+
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local Zones = workspace:WaitForChild("Zones")
+local SpawnLocation = workspace:WaitForChild("SpawnLocation")
+
+-- Config
+local TP_OFFSET        = Vector3.new(0, 0, -6)
+local PROXIMITY_DELAY  = 0.25
+local SCAN_INTERVAL    = 3.5
+
+local function getMoneyValue(moneyObj)
+    if not moneyObj or not moneyObj:IsA("TextLabel") then return 0 end
+    local clean = moneyObj.Text:gsub("[^%d]", "")
+    return tonumber(clean) or 0
+end
+
+local function getBestTarget()
+    local candidates = {}
+
+    for _, zone in ipairs(Zones:GetChildren()) do
+        for _, wildChar in ipairs(zone:GetChildren()) do
+            local bp = wildChar:FindFirstChild("Billboard-Part")
+            if not bp then continue end
+
+            local bb = bp:FindFirstChild("WildCharacterBillboard")
+            if not bb then continue end
+
+            local mf = bb:FindFirstChild("MainFrame")
+            if not mf then continue end
+
+            local rarity = mf:FindFirstChild("Rarity")
+            if not rarity then continue end
+
+            local isCelestial = rarity:FindFirstChild("Celestial") or rarity:FindFirstChild("Celestial Only")
+            local isGod       = rarity:FindFirstChild("God")
+
+            -- Priority: Celestial > God (if both toggles on)
+            local wanted = false
+            if AutoCelestialEnabled and isCelestial then
+                wanted = true
+            elseif AutoGodEnabled and isGod then
+                wanted = true
+            end
+
+            if not wanted then continue end
+
+            local moneyObj = mf:FindFirstChild("Money")
+            local money = getMoneyValue(moneyObj)
+
+            table.insert(candidates, {
+                Model     = wildChar,
+                Money     = money,
+                ZoneName  = zone.Name,
+                IsCelestial = isCelestial ~= nil
+            })
+        end
+    end
+
+    if #candidates == 0 then return nil end
+
+    -- Sort highest money first
+    table.sort(candidates, function(a, b)
+        return a.Money > b.Money
+    end)
+
+    return candidates[1]
+end
+
+local function findPromptInModel(model)
+    local root = model:FindFirstChild("RootPart") or model.PrimaryPart or model:FindFirstChild("HumanoidRootPart")
+    if root then
+        local p = root:FindFirstChild("CollectPrompt") or root:FindFirstChildWhichIsA("ProximityPrompt")
+        if p then return p end
+    end
+    return model:FindFirstChild("CollectPrompt", true) or model:FindFirstChildWhichIsA("ProximityPrompt", true)
+end
+
+local function triggerPrompt(prompt)
+    if not prompt or not prompt:IsA("ProximityPrompt") then return false end
+
+    prompt:InputHoldBegin()
+    task.wait(prompt.HoldDuration + 0.08)
+    prompt:InputHoldEnd()
+    task.wait(0.15)
+    return true
+end
+
+local function fireFinishTouch()
+    local finishPart = Zones:FindFirstChild("FinishPart")
+    if not finishPart then return false end
+
+    local char = player.Character
+    if not char then return false end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+
+    firetouchinterest(finishPart, hrp, 0)
+    task.wait(0.1)
+    firetouchinterest(finishPart, hrp, 1)
+    return true
+end
+
+local function tryAutoCollect()
+    if not (AutoCelestialEnabled or AutoGodEnabled) then return end
+
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local best = getBestTarget()
+    if not best then return end
+
+    print("Target: " .. best.ZoneName .. " | $" .. best.Money .. (best.IsCelestial and " (Celestial)" or " (God)"))
+
+    local wildRoot = best.Model:FindFirstChild("RootPart") or best.Model:FindFirstChild("HumanoidRootPart") or best.Model.PrimaryPart
+    if not wildRoot then return end
+
+    -- Highlight (optional - red stroke)
+    local bp = best.Model:FindFirstChild("Billboard-Part")
+    if bp and bp:FindFirstChild("WildCharacterBillboard") then
+        local mf = bp.WildCharacterBillboard:FindFirstChild("MainFrame")
+        if mf then
+            local money = mf:FindFirstChild("Money")
+            if money then
+                local stroke = money:FindFirstChild("UIStroke")
+                if stroke then
+                    stroke.Color = Color3.fromRGB(255, 0, 0)
+                    stroke.Thickness = 4
+                    stroke.Transparency = 0
+                end
+            end
+        end
+    end
+
+    -- TP to target
+    hrp.CFrame = wildRoot.CFrame * CFrame.new(TP_OFFSET)
+    task.wait(PROXIMITY_DELAY)
+
+    -- Collect
+    local prompt = findPromptInModel(best.Model)
+    if not prompt then
+        local zoneObj = Zones:FindFirstChild(best.ZoneName)
+        if zoneObj then
+            prompt = zoneObj:FindFirstChild("CollectPrompt", true) or zoneObj:FindFirstChildWhichIsA("ProximityPrompt", true)
+        end
+    end
+
+    if prompt then
+        triggerPrompt(prompt)
+    end
+
+    task.wait(0.4)
+
+    -- TP back
+    local safePos = SpawnLocation.Position + Vector3.new(0, 5, 0)
+    hrp.CFrame = CFrame.new(safePos)
+
+    -- Finish touch
+    fireFinishTouch()
+end
+
+-- Start loop (non-blocking)
+task.spawn(function()
+    while true do
+        pcall(tryAutoCollect)  -- errors won't break loop
+        task.wait(SCAN_INTERVAL)
+    end
+end)
+
+-- Init GUI
+library:Init()
+
+print("Zaporium GUI Loaded | Auto Celestial & Auto God ready!")
