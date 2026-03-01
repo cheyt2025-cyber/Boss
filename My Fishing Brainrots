@@ -1,33 +1,33 @@
--- ZAPORIUM GUI - UPDATED WITH AUTO SPAWN EGG + AUTO PICK UP + AUTO REBIRTH --
-
+-- ZAPORIUM GUI - OPTIMIZED v7.0 + CLEAN LAYOUT (Egg farming grouped) --
 local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
 
 -- Create main window
 local Window = library:CreateWindow("My Fishing Brainrots")
 
--- Main Features folder
+-- Main Features folder (now cleaner)
 local Main = Window:AddFolder("Main Features")
 
--- Auto Spawn Egg Toggle
-Main:AddToggle({
+-- Egg Farming folder (was Rarity Targets)
+local EggFarm = Window:AddFolder("Farm Egg")
+
+-- Auto Spawn Egg Toggle (moved here)
+EggFarm:AddToggle({
     text = "Auto Spawn Egg",
     state = false,
     flag = "autospawnegg",
     callback = function(enabled)
         if enabled then
-            print("⚡ AUTO SPAWN EGG ACTIVATED ⚡")
+            print("Auto Spawn Egg → Activated")
             spawn(function()
                 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
                 local spawnRemote = ReplicatedStorage
                 :WaitForChild("Shared")
                 :WaitForChild("Packages")
                 :WaitForChild("Networker")
                 :WaitForChild("RF/RequestEggSpawn")
 
-                print("⚡ EGG HUNTER v5.0 - SMART 3-EGG SYSTEM FIX + MAX SPEED! ⚡")
+                print("Egg Hunter v7.0 - Reliable detection active")
 
-                -- Rarity lookup
                 local raritySet = {
                     ["common"] = "Common",
                     ["uncommon"] = "Uncommon",
@@ -42,134 +42,182 @@ Main:AddToggle({
                     ["admin"] = "Admin",
                     ["og"] = "OG",
                     ["xmas 25"] = "XMAS 25",
-                    ["xmas25"] = "XMAS25"
+                    ["xmas25"] = "XMAS25",
+                    ["event"] = "Event",
+                    ["divine"] = "Divine",
+                    ["god"] = "GOD",
+                    ["???"] = "???",
+                    ["celest"] = "CELEST"
                 }
-
-                local targetHighTiers = {}
-                for k in pairs(raritySet) do
-                    if k ~= "common" and k ~= "uncommon" and k ~= "rare" and k ~= "epic" then
-                        targetHighTiers[k] = true
-                    end
-                end
 
                 local eggsFolder = workspace:WaitForChild("CoreObjects"):WaitForChild("Eggs")
 
-                -- FAST RARITY DETECTION
                 local function getEggRarity(egg)
-                    if not egg then return "Unknown" end
+                    if not egg or not egg.Parent then return "Unknown" end
 
-                    for _, obj in ipairs(egg:GetDescendants()) do
-                        local nameLower = obj.Name:lower()
-                        if raritySet[nameLower] then return raritySet[nameLower] end
-                        local success, text = pcall(function() return obj.Text end)
-                        if success and text and text ~= "" then
-                            local textLower = text:lower()
-                            if raritySet[textLower] then return raritySet[textLower] end
-                        end
-                    end
-
-                    local waited = 0
-                    while waited < 1.5 do
-                        task.wait(0.2)
-                        waited += 0.2
+                    local function quickScan()
                         for _, obj in ipairs(egg:GetDescendants()) do
+                            if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("SurfaceGui") then
+                                local success, text = pcall(function() return obj.Text end)
+                                if success and text and text ~= "" then
+                                    local textLower = text:lower():gsub("%s+", " "):match("^%s*(.-)%s*$")
+                                    if raritySet[textLower] then 
+                                        return raritySet[textLower]
+                                    end
+                                end
+                            end
                             local nameLower = obj.Name:lower()
-                            if raritySet[nameLower] then return raritySet[nameLower] end
-                            local success, text = pcall(function() return obj.Text end)
-                            if success and text and text ~= "" then
-                                local textLower = text:lower()
-                                if raritySet[textLower] then return raritySet[textLower] end
+                            if raritySet[nameLower] then 
+                                return raritySet[nameLower]
                             end
                         end
+                        return nil
                     end
 
+                    local rarity = quickScan()
+                    if rarity then return rarity end
+
+                    local pollTime = 0
+                    while pollTime < 3 do
+                        task.wait(0.2)
+                        pollTime = pollTime + 0.2
+                        if not egg.Parent then return "Unknown" end
+                        rarity = quickScan()
+                        if rarity then return rarity end
+                    end
                     return "Unknown"
                 end
 
-                print("🚀 USING 3-EGG CONVEYOR SYSTEM - Only checks the NEWEST egg! 🚀")
-                print("Ignores middle & old eggs (conveyor + lava skip)\n")
+                local function shouldKeepThisRarity(rarityLower)
+                    if not rarityLower or rarityLower == "unknown" then return false end
+                    local r = rarityLower:gsub("%s+", ""):lower()
+                    if r == "legendary" then return library.flags.target_legendary or false end
+                    if r == "mythic" then return library.flags.target_mythic or false end
+                    if r == "secret" then return library.flags.target_secret or false end
+                    if r == "exotic" then return library.flags.target_exotic or false end
+                    if r == "event" or r == "limited" or r == "og" or r == "xmas25" or r == "xmas 25" then
+                        return library.flags.target_special or false
+                    end
+                    if r == "divine" or r == "god" or r == "???" or r == "celest" or r == "exclusive" or r == "admin" then
+                        return library.flags.target_godly or false
+                    end
+                    return false
+                end
 
+                print("Using ChildAdded detection + extended check")
                 local spawnCount = 0
-                local sessionHighTiers = 0
+                local sessionTargets = 0
 
                 while library.flags.autospawnegg do
-                    spawnCount += 1
-
+                    spawnCount = spawnCount + 1
                     pcall(function()
                         spawnRemote:InvokeServer()
                     end)
 
-                    local newEgg = nil
-                    local startChildren = #eggsFolder:GetChildren()
-                    local timeout = 0
+                    local success, newEgg = pcall(function()
+                        return eggsFolder.ChildAdded:Wait()
+                    end)
 
-                    repeat
-                        task.wait(0.02)
-                        timeout += 0.02
-                        local current = eggsFolder:GetChildren()
-                        if #current > startChildren then
-                            newEgg = current[#current]
-                        end
-                    until newEgg or timeout > 2
-
-                    if not newEgg then
-                        task.wait(0.02)
+                    if not success or not newEgg or not newEgg.Parent then
+                        task.wait(0.05)
                         continue
                     end
 
-                    print("⚡ #" .. spawnCount .. ": Checking NEW egg → " .. newEgg.Name)
+                    print("#" .. spawnCount .. ": New egg detected → " .. newEgg.Name)
 
-                    task.wait(0.6)
-
+                    task.wait(1.0)
                     local rarity = getEggRarity(newEgg)
                     local rarityLower = rarity:lower()
 
-                    if targetHighTiers[rarityLower] then
-                        sessionHighTiers += 1
-                        print("\n🎉🎉🎉 HIGH TIER IN NEW EGG!!! 🎉🎉🎉")
-                        print("🥚 " .. newEgg.Name .. " | " .. rarity .. " 💎🔥")
-                        print("📊 " .. spawnCount .. " spawned | " .. sessionHighTiers .. " high tiers")
-                        print("\n🛑 PAUSED - BUY THE NEW ONE NOW!\n")
+                    if shouldKeepThisRarity(rarityLower) then
+                        sessionTargets = sessionTargets + 1
+                        print("\nTARGET RARITY FOUND!")
+                        print("Egg: " .. newEgg.Name .. " | Rarity: " .. rarity)
+                        print("Spawned: " .. spawnCount .. " | Targets: " .. sessionTargets)
+                        print("Paused - buy the egg now\n")
 
-                        repeat task.wait(0.1) until newEgg.Parent ~= eggsFolder
-
-                        print("✅ BOUGHT! RESUMING FULL BLAST... 🚀\n")
+                        repeat task.wait(0.1) until not newEgg.Parent or newEgg.Parent ~= eggsFolder
+                        print("Egg bought - resuming\n")
                         task.wait(0.1)
                     else
                         if rarity == "Unknown" then
-                            print("   ↳ Unknown (new egg) - skipped safely")
+                            print(" ↳ Unknown - skipped")
                         else
-                            print("   ↳ " .. rarity .. " - skipped")
+                            print(" ↳ " .. rarity .. " - skipped")
                         end
                     end
 
-                    task.wait(0.02)
+                    task.wait(0.01)
                 end
             end)
         else
-            print("🛑 AUTO SPAWN EGG DEACTIVATED 🛑")
+            print("Auto Spawn Egg → Deactivated")
         end
     end
 })
 
--- Description label for Auto Spawn Egg
-Main:AddLabel({text = "Auto get Legendary+"})
+-- Description (moved here too)
+EggFarm:AddLabel({text = "Auto-spawn eggs"})
 
--- Auto Pick Up Toggle
+-- Rarity selection (inside the same folder)
+EggFarm:AddLabel({text = "Pause on selected rarities"})
+
+EggFarm:AddToggle({
+    text = "Legendary",
+    state = true,
+    flag = "target_legendary",
+    callback = function() end
+})
+
+EggFarm:AddToggle({
+    text = "Mythic",
+    state = true,
+    flag = "target_mythic",
+    callback = function() end
+})
+
+EggFarm:AddToggle({
+    text = "Secret",
+    state = true,
+    flag = "target_secret",
+    callback = function() end
+})
+
+EggFarm:AddToggle({
+    text = "Exotic",
+    state = true,
+    flag = "target_exotic",
+    callback = function() end
+})
+
+EggFarm:AddToggle({
+    text = "Events / Limited / OG / XMAS",
+    state = true,
+    flag = "target_special",
+    callback = function() end
+})
+
+EggFarm:AddToggle({
+    text = "Divine / GOD / Exclusive / Special",
+    state = true,
+    flag = "target_godly",
+    callback = function() end
+})
+
+-- Auto Pick Up (stays in Main)
 Main:AddToggle({
     text = "Auto Pick Up",
     state = false,
     flag = "autopickup",
     callback = function(enabled)
         if enabled then
-            print("⚡ AUTO PICK UP ACTIVATED ⚡ (Delay: " .. library.flags.pickupdelay .. "s)")
+            print("Auto Pick Up → Activated (delay: " .. library.flags.pickupdelay .. "s)")
             spawn(function()
                 local pickupRemote = game:GetService("ReplicatedStorage")
                 :WaitForChild("Shared")
                 :WaitForChild("Packages")
                 :WaitForChild("Networker")
                 :WaitForChild("RE/PickupBoxes")
-
                 while library.flags.autopickup do
                     pcall(function()
                         pickupRemote:FireServer()
@@ -178,55 +226,49 @@ Main:AddToggle({
                 end
             end)
         else
-            print("🛑 AUTO PICK UP DEACTIVATED 🛑")
+            print("Auto Pick Up → Deactivated")
         end
     end
 })
 
--- Slider for Auto Pick Up delay
 Main:AddSlider({
-    text = "Pick Up Delay (sec.)",
+    text = "Pick Up Delay (seconds)",
     min = 1,
     max = 60,
     value = 1,
     flag = "pickupdelay",
     callback = function(value)
-        print("Pick Up Delay changed to: " .. value .. "s")
+        print("Pick Up delay set to: " .. value .. "s")
     end
 })
 
--- Auto Rebirth Toggle
 Main:AddToggle({
     text = "Auto Rebirth",
     state = false,
     flag = "autorebirth",
     callback = function(enabled)
         if enabled then
-            print("⚡ AUTO REBIRTH ACTIVATED ⚡")
+            print("Auto Rebirth → Activated")
             spawn(function()
                 local rebirthRemote = game:GetService("ReplicatedStorage")
                 :WaitForChild("Shared")
                 :WaitForChild("Packages")
                 :WaitForChild("Networker")
                 :WaitForChild("RF/Rebirth")
-
                 while library.flags.autorebirth do
                     pcall(function()
                         rebirthRemote:InvokeServer()
                     end)
-                    task.wait(1)  -- Fixed 1 second delay as requested
+                    task.wait(1)
                 end
             end)
         else
-            print("🛑 AUTO REBIRTH DEACTIVATED 🛑")
+            print("Auto Rebirth → Deactivated")
         end
     end
 })
 
--- Your credit
 Main:AddLabel({text = "YT: ScriptZap0"})
 
--- Initialize the GUI
 library:Init()
-
-print("Zaporium GUI Loaded! - Auto Spawn Egg + Auto Pick Up + Auto Rebirth Ready")
+print("My Fishing Brainrots GUI loaded – ready")
