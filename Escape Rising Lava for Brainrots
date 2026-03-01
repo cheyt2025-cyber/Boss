@@ -1,0 +1,252 @@
+
+-- Made by Zappisme
+
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Services & Vars
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local brainrotsFolder = workspace:WaitForChild("Brainrots")
+local plotsFolder = workspace:WaitForChild("Plots")
+
+local zones = {
+    "Dropped", "Zone1", "Zone2", "Zone3", "Zone4", "Zone5", "Zone6", "Zone7", "Zone8", "Zone9"
+}
+
+local HOME_CFRAME = CFrame.new(83.71, 3501.17, -200.25)
+local MIN_INCOME = 2500000000  -- 2.5B
+
+-- Farm state
+getgenv().AutoFarmEnabled = false
+getgenv().FarmLoopThread = nil
+
+-- Collect state
+getgenv().AutoCollectEnabled = false
+getgenv().CollectLoopThread = nil
+
+-- ────────────────────────────────────────────────
+-- Auto Farm (Brainrot Stealer) Functions
+-- ────────────────────────────────────────────────
+
+local function parseIncome(text)
+    if not text or text == "" then return 0 end
+    text = text:lower():gsub("[^%d%.kkmmbBtTs$/]", "")
+
+    local multiplier = 1
+    if text:find("k") then multiplier = 1000
+    elseif text:find("m") then multiplier = 1000000
+    elseif text:find("b") then multiplier = 1000000000
+    elseif text:find("t") then multiplier = 1000000000000 end
+
+    local numStr = text:gsub("[kkmmbBtTs$/]", "")
+    local num = tonumber(numStr) or 0
+    return num * multiplier
+end
+
+local function scanBrainrots()
+    local allBrainrots = {}
+    for _, zoneName in ipairs(zones) do
+        local zone = brainrotsFolder:FindFirstChild(zoneName)
+        if zone then
+            for _, obj in ipairs(zone:GetChildren()) do
+                if obj:IsA("Model") and obj.Name:match("^B") then
+                    local att = obj:FindFirstChild("Attachment")
+                    if att then
+                        local br = att:FindFirstChild("Brainrot")
+                        if br then
+                            local rarityLbl = br:FindFirstChild("Rarity")
+                            local incomeLbl = br:FindFirstChild("Income")
+                            if rarityLbl and incomeLbl
+                            and rarityLbl:IsA("TextLabel")
+                            and incomeLbl:IsA("TextLabel") then
+
+                                local incomeNum = parseIncome(incomeLbl.Text)
+                                if incomeNum >= MIN_INCOME then
+                                    table.insert(allBrainrots, {
+                                        path = zoneName .. "." .. obj.Name,
+                                        rarity = rarityLbl.Text,
+                                        income = incomeNum,
+                                        rawIncome = incomeLbl.Text,
+                                        obj = obj
+                                    })
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    table.sort(allBrainrots, function(a, b) return a.income > b.income end)
+    return allBrainrots
+end
+
+local function waitForCharacter()
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+        player.Character = player.Character or player.CharacterAdded:Wait()
+        player.Character:WaitForChild("HumanoidRootPart", 10)
+    end
+end
+
+local function teleportToBrainrot(obj)
+    waitForCharacter()
+    local targetCFrame = obj:GetPivot() + Vector3.new(0, 5, 0)
+    player.Character.HumanoidRootPart.CFrame = targetCFrame
+end
+
+local function stealBrainrot(obj)
+    local prompt = obj:FindFirstChild("ProximityPrompt")
+    if prompt then
+        fireproximityprompt(prompt)
+        wait(0.5)
+    else
+        warn("No ProximityPrompt on " .. obj.Name)
+    end
+end
+
+local function goHome()
+    waitForCharacter()
+    player.Character.HumanoidRootPart.CFrame = HOME_CFRAME
+end
+
+local function farmTopBrainrot()
+    local all = scanBrainrots()
+    if #all == 0 then
+        -- print("[AutoFarm] No >=2.5B brainrots found. Skipping...")
+        return
+    end
+
+    local top = all[1]
+    print(string.format("[AutoFarm] Stealing: %s | %s | %s (%d/s)",
+    top.path, top.rarity, top.rawIncome, top.income))
+
+    teleportToBrainrot(top.obj)
+    wait(0.2)
+    stealBrainrot(top.obj)
+    wait(1)
+    goHome()
+end
+
+local function startFarmLoop()
+    if getgenv().FarmLoopThread then return end
+    getgenv().FarmLoopThread = spawn(function()
+        while getgenv().AutoFarmEnabled do
+            farmTopBrainrot()
+            wait(5)
+        end
+        getgenv().FarmLoopThread = nil
+    end)
+end
+
+-- ────────────────────────────────────────────────
+-- Auto Collect (Plot Money/Items) Functions
+-- ────────────────────────────────────────────────
+
+local myPlot = nil
+
+local function findMyPlot()
+    for _, plot in ipairs(plotsFolder:GetChildren()) do
+        if plot.Name ~= "Anchors" then
+            for _, obj in ipairs(plot:GetDescendants()) do
+                if obj:IsA("TextLabel") and string.find(string.lower(obj.Text), "your plot") then
+                    return plot
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- One-time plot detection
+spawn(function()
+    repeat
+        myPlot = findMyPlot()
+        task.wait(0.5)
+    until myPlot
+    print("✅ Your plot detected: " .. myPlot.Name)
+end)
+
+local function collectAll()
+    if not myPlot then return end
+    local collectFolder = myPlot:FindFirstChild("Collect")
+    if not collectFolder then return end
+
+    waitForCharacter()
+    local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    for _, obj in ipairs(collectFolder:GetDescendants()) do
+        if obj:IsA("TouchTransmitter") then
+            local part = obj.Parent
+            if part and part:IsA("BasePart") then
+                firetouchinterest(hrp, part, 0)
+                task.wait(0.01)
+                firetouchinterest(hrp, part, 1)
+            end
+        end
+    end
+end
+
+local function startCollectLoop()
+    if getgenv().CollectLoopThread then return end
+    getgenv().CollectLoopThread = spawn(function()
+        while getgenv().AutoCollectEnabled do
+            collectAll()
+            task.wait(0.5)
+        end
+        getgenv().CollectLoopThread = nil
+    end)
+end
+
+-- ────────────────────────────────────────────────
+-- GUI
+-- ────────────────────────────────────────────────
+
+local Window = library:CreateWindow("Escape Rising Lava for Brainrots")
+
+local Main = Window:AddFolder("Main Features")
+
+-- Auto Collect (placed on top)
+Main:AddToggle({
+    text = "Auto Collect",
+    state = false,
+    flag = "autocollect",
+    callback = function(value)
+        getgenv().AutoCollectEnabled = value
+        if value then
+            print("[Zaporium] Auto Collect ENABLED - Collecting from your plot")
+            if myPlot then
+                startCollectLoop()
+            else
+                print("[Warning] Plot not detected yet - will start when found")
+            end
+        else
+            print("[Zaporium] Auto Collect DISABLED")
+        end
+    end
+})
+
+-- Existing Auto Farm toggle
+Main:AddToggle({
+    text = "Auto Farm",
+    state = false,
+    flag = "autofarm",
+    callback = function(value)
+        getgenv().AutoFarmEnabled = value
+        if value then
+            print("[Zaporium] Auto Farm ENABLED - Targeting >= 2.5B $/s brainrots")
+            startFarmLoop()
+        else
+            print("[Zaporium] Auto Farm DISABLED")
+        end
+    end
+})
+
+Main:AddLabel({text = "Prio on High tier"})
+
+Main:AddLabel({text = "Made by Zappisme"})
+
+library:Init()
+
+print("Zaporium GUI Loaded | Auto Collect + Auto Farm (>=2.5B) ready!")
