@@ -1,0 +1,202 @@
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+local Window = library:CreateWindow("Become Fast")
+local Main = Window:AddFolder("Main Features")
+
+-- ===== COLLECT TELEPORTS =====
+local W1 = workspace:WaitForChild("Obbys"):WaitForChild("W1")
+
+local collectParts = {}
+local winNames = {"Win1", "Win3", "Win10", "Win15"}  -- No WinVIP
+
+for _, winName in ipairs(winNames) do
+    local success, part = pcall(function()
+        return W1:WaitForChild(winName):WaitForChild("Finish"):WaitForChild("Collect")
+    end)
+    if success and part then
+        collectParts[winName] = part
+    else
+        warn("Collect not found for " .. winName)
+    end
+end
+
+local enabledCollects = {}
+for _, winName in ipairs(winNames) do
+    enabledCollects[winName] = false
+end
+
+-- Teleport loop (smooth, anti-vibration)
+spawn(function()
+    local player = game.Players.LocalPlayer
+    while true do
+        wait(0.18)
+        local character = player.Character
+        if not character then continue end
+        local hrp = character:FindFirstChild("HumanoidRootPart")
+        if not hrp then continue end
+
+        local activeParts = {}
+        for winName, isEnabled in pairs(enabledCollects) do
+            if isEnabled and collectParts[winName] then
+                table.insert(activeParts, collectParts[winName])
+            end
+        end
+        if #activeParts == 0 then continue end
+
+        local cycleIndex = math.floor(tick() * 5) % #activeParts + 1
+        local destination = activeParts[cycleIndex]
+
+        hrp.Velocity = Vector3.new(0, 0, 0)
+        hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
+        hrp.AssemblyAngularVelocity = Vector3.new(0,0,0)
+
+        local offset = Vector3.new(math.random(-4,4)/10, 3, math.random(-4,4)/10)
+        hrp.CFrame = destination.CFrame + offset
+    end
+end)
+
+-- ===== Farm Tab =====
+local FarmTab = Window:AddFolder("Farm Tab")
+
+-- Remotes (shared)
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Assets = ReplicatedStorage:WaitForChild("Assets")
+local Remotes = Assets:WaitForChild("Remotes")
+
+-- Fast Clicker toggle
+local fastClickerEnabled = false
+FarmTab:AddToggle({
+    text = "Fast Clicker",
+    state = false,
+    callback = function(state)
+        fastClickerEnabled = state
+    end
+})
+
+-- Auto Rebirth toggle
+local autoRebirthEnabled = false
+FarmTab:AddToggle({
+    text = "Auto Rebirth",
+    state = false,
+    callback = function(state)
+        autoRebirthEnabled = state
+    end
+})
+
+-- NEW: Auto Lucky Block toggle (under Auto Rebirth)
+local autoLuckyEnabled = false
+FarmTab:AddToggle({
+    text = "Auto Lucky Block",
+    state = false,
+    callback = function(state)
+        autoLuckyEnabled = state
+    end
+})
+
+-- Fast Clicker loop
+spawn(function()
+    local tapRemote = Remotes:WaitForChild("Tap")
+    while true do
+        task.wait(0.1)
+        if fastClickerEnabled then
+            pcall(function()
+                tapRemote:FireServer()
+            end)
+        end
+    end
+end)
+
+-- Auto Rebirth loop
+spawn(function()
+    local rebirthRemote = Remotes:WaitForChild("Rebirth")
+    while true do
+        task.wait(0.5)
+        if autoRebirthEnabled then
+            pcall(function()
+                rebirthRemote:FireServer()
+            end)
+        end
+    end
+end)
+
+-- NEW: Auto Lucky Block loop (continuous scan + trigger all Lucky Blocks)
+spawn(function()
+    local player = game.Players.LocalPlayer
+    local teleportOffset = Vector3.new(0, 3, 0)
+    local waitBetween = 0.4
+
+    while true do
+        task.wait(1)  -- Scan every 1s for new blocks (adjust if needed)
+        if not autoLuckyEnabled then continue end
+
+        local character = player.Character
+        if not character then continue end
+        local hrp = character:FindFirstChild("HumanoidRootPart")
+        if not hrp then continue end
+
+        -- Collect all current Lucky Blocks with prompts
+        local luckyBlocks = {}
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj.Name == "Lucky Block" and (obj:IsA("BasePart") or obj:IsA("Model")) then
+                local prompt = obj:FindFirstChild("ProximityPrompt", true)
+                or (obj:IsA("BasePart") and obj:FindFirstChildOfClass("ProximityPrompt"))
+                if prompt and prompt:IsA("ProximityPrompt") then
+                    table.insert(luckyBlocks, {obj = obj, prompt = prompt})
+                end
+            end
+        end
+
+        -- Process each one (exact method from your script)
+        for _, data in ipairs(luckyBlocks) do
+            pcall(function()
+                -- Smooth teleport (anti-vibration)
+                hrp.Velocity = Vector3.new(0, 0, 0)
+                hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+
+                hrp.CFrame = data.obj:GetPivot() + teleportOffset
+
+                task.wait(0.15)
+
+                data.prompt:InputHoldBegin()
+                task.wait(data.prompt.HoldDuration + 0.1)
+                data.prompt:InputHoldEnd()
+
+                print("Triggered Lucky Block @ " .. tostring(data.obj:GetPivot().Position))
+            end)
+
+            task.wait(waitBetween)
+        end
+    end
+end)
+
+-- ===== MAIN FEATURES TOGGLES =====
+Main:AddToggle({
+    text = "Win (Area1)",
+    state = false,
+    callback = function(state) enabledCollects.Win1 = state end
+})
+
+Main:AddToggle({
+    text = "Win (Area2)",
+    state = false,
+    callback = function(state) enabledCollects.Win3 = state end
+})
+
+Main:AddToggle({
+    text = "Win (Area3)",
+    state = false,
+    callback = function(state) enabledCollects.Win10 = state end
+})
+
+Main:AddToggle({
+    text = "Win (Area4)",
+    state = false,
+    callback = function(state) enabledCollects.Win15 = state end
+})
+
+Main:AddLabel({text = "Made by Zappisme"})
+
+library:Init()
+
+print("Zaporium GUI – Added Auto Lucky Block!")
