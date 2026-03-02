@@ -1,5 +1,3 @@
--- Zaporium GUI + Auto-Collect Animals (CoinBoost priority FIXED) + Auto-Farm Specific Eggs
-
 local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
 
 -- Create main window
@@ -10,9 +8,9 @@ local Main = Window:AddFolder("Main Features")
 
 -- Animal toggles
 local animalToggles = {
-    Mythical  = false,
-    Divine    = false,
-    Secret    = false,
+    Mythical = false,
+    Divine = false,
+    Secret = false,
     Exclusive = false,
 }
 
@@ -58,9 +56,9 @@ Main:AddLabel({text = "Made by Zappisme"})
 local EggFarm = Window:AddFolder("Farm Egg")
 
 local eggToggles = {
-    DivineVoidEgg     = false,
-    MythicalTreeEgg   = false,
-    MythicalEgg       = false,
+    DivineVoidEgg = false,
+    MythicalTreeEgg = false,
+    MythicalEgg = false,
 }
 
 EggFarm:AddToggle({
@@ -92,11 +90,10 @@ EggFarm:AddToggle({
 
 -- Initialize GUI
 library:Init()
-
 print("🚀 Zaporium GUI Loaded | Animal + Egg Auto-Farm Active")
 
 -- ────────────────────────────────────────────────
---               SHARED FUNCTIONS
+-- SHARED FUNCTIONS
 -- ────────────────────────────────────────────────
 
 local Players = game:GetService("Players")
@@ -106,22 +103,22 @@ local homeCFrame = CFrame.new(4.19, 33.50, 37.51)
 local function findMountRoot()
     local char = player.Character
     if not char then return nil end
-
+    
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return nil end
-
+    
     for _, joint in ipairs(hrp:GetJoints()) do
         if joint:IsA("Weld") or joint:IsA("Motor6D") or joint:IsA("WeldConstraint") then
             local other = (joint.Part0 == hrp and joint.Part1) or (joint.Part1 == hrp and joint.Part0)
             if other and other ~= hrp and other:IsDescendantOf(workspace) then
                 local possibleRoot = other.Parent:FindFirstChild("RootPart")
-                or other.Parent:FindFirstChild("PrimaryPart")
-                or other
+                                  or other.Parent:FindFirstChild("PrimaryPart")
+                                  or other
                 if possibleRoot then return possibleRoot end
             end
         end
     end
-
+    
     local hum = char:FindFirstChildOfClass("Humanoid")
     if hum and hum.Seated and hum.SeatPart then
         local seat = hum.SeatPart
@@ -130,7 +127,7 @@ local function findMountRoot()
             return model.PrimaryPart or model:FindFirstChild("RootPart") or seat
         end
     end
-
+    
     return nil
 end
 
@@ -140,42 +137,42 @@ local function teleportAndInteract(targetModel, promptObj)
         warn("No mount detected → cannot reach target")
         return false
     end
-
+    
     local targetPos = targetModel.PrimaryPart
-    and targetModel.PrimaryPart.Position
-    or targetModel:GetPivot().Position
-
+        and targetModel.PrimaryPart.Position
+        or targetModel:GetPivot().Position
+    
     local offset = Vector3.new(math.random(-4,4), 7, math.random(-4,4))
     mountRoot.CFrame = CFrame.new(targetPos + offset)
-
+    
     task.wait(0.9)
-
+    
     if promptObj and promptObj:IsA("ProximityPrompt") and promptObj.Enabled then
         fireproximityprompt(promptObj)
         task.wait(0.7)
     end
-
+    
     mountRoot.CFrame = homeCFrame
     task.wait(0.5)
-
+    
     return true
 end
 
 -- ────────────────────────────────────────────────
---      IMPROVED COINBOOST PARSER (handles k/m/b)
+-- IMPROVED COINBOOST PARSER (handles k/m/b)
 -- ────────────────────────────────────────────────
 
 local function parseCoinBoost(text)
     if not text or text == "" then return 0 end
-
+    
     text = text:lower():gsub("%s+", ""):gsub("x$", ""):gsub(",", "")
-
+    
     local numStr, suffix = text:match("(%d+%.?%d*)([kmb]?)")
     if not numStr then return 0 end
-
+    
     local num = tonumber(numStr)
     if not num then return 0 end
-
+    
     if suffix == "b" or suffix:find("bil") then
         return num * 1e9
     elseif suffix == "m" then
@@ -188,7 +185,7 @@ local function parseCoinBoost(text)
 end
 
 -- ────────────────────────────────────────────────
---               ANIMAL COLLECTION
+-- ANIMAL COLLECTION
 -- ────────────────────────────────────────────────
 
 local function anyAnimalAutoEnabled()
@@ -199,7 +196,7 @@ local function getEnabledTierAnimals()
     local targets = {}
     local raceAnimals = workspace:FindFirstChild("RaceAnimals")
     if not raceAnimals then return targets end
-
+    
     for _, animal in raceAnimals:GetChildren() do
         local board = animal:FindFirstChild("RaceInfoBoard_" .. animal.Name)
         local frame = board and board:FindFirstChild("Frame")
@@ -207,35 +204,35 @@ local function getEnabledTierAnimals()
         local coinFrame = frame and frame:FindFirstChild("CoinBoost")
         local tierLabel = tierFrame and tierFrame:FindFirstChild("TextLabel")
         local coinLabel = coinFrame and coinFrame:FindFirstChild("TextLabel")
-
+        
         local tierName = tierLabel and tierLabel:IsA("TextLabel") and tierLabel.Text or ""
-
+        
         if animalToggles[tierName] then
             local coinText = coinLabel and coinLabel:IsA("TextLabel") and coinLabel.Text or "0"
             local coinNum = parseCoinBoost(coinText)
-
+            
             local prompt = animal:FindFirstChild("RaceCollectPrompt_" .. animal.Name)
             if prompt and prompt:IsA("ProximityPrompt") then
                 table.insert(targets, {
-                    Model         = animal,
-                    Tier          = tierName,
-                    CoinBoostNum  = coinNum,
+                    Model = animal,
+                    Tier = tierName,
+                    CoinBoostNum = coinNum,
                     CoinBoostText = coinText,
-                    Prompt        = prompt
+                    Prompt = prompt
                 })
             end
         end
     end
-
+    
     table.sort(targets, function(a, b)
         return a.CoinBoostNum > b.CoinBoostNum
     end)
-
+    
     return targets
 end
 
 -- ────────────────────────────────────────────────
---               EGG FARMING
+-- EGG FARMING
 -- ────────────────────────────────────────────────
 
 local EGG_PRIORITY = { "DivineVoidEgg", "MythicalTreeEgg", "MythicalEgg" }
@@ -248,76 +245,91 @@ local function getEnabledEggs()
     local targets = {}
     local raceEggs = workspace:FindFirstChild("RaceEggs")
     if not raceEggs then return targets end
-
+    
     for _, egg in raceEggs:GetChildren() do
         local board = egg:FindFirstChild("RaceInfoBoard_" .. egg.Name)
         local frame = board and board:FindFirstChild("Frame")
         local nameObj = frame and frame:FindFirstChild("Name")
         local textLabel = nameObj and nameObj:FindFirstChild("TextLabel")
-
+        
         if textLabel and textLabel:IsA("TextLabel") then
             local eggDisplayName = textLabel.Text
             if eggToggles[eggDisplayName] then
                 local prompt = egg:FindFirstChildWhichIsA("ProximityPrompt")
                 table.insert(targets, {
-                    Model  = egg,
-                    Name   = eggDisplayName,
+                    Model = egg,
+                    Name = eggDisplayName,
                     Prompt = prompt
                 })
             end
         end
     end
-
+    
     table.sort(targets, function(a, b)
         local prioA = table.find(EGG_PRIORITY, a.Name) or 999
         local prioB = table.find(EGG_PRIORITY, b.Name) or 999
         return prioA < prioB
     end)
-
+    
     return targets
 end
 
 -- ────────────────────────────────────────────────
---               MAIN LOOP
+-- MAIN LOOP (FIXED)
 -- ────────────────────────────────────────────────
 
 spawn(function()
     while true do
-        -- Animals
+        local didSomething = false
+        
+        -- ── Animal collection ───────────────────────────────
         if anyAnimalAutoEnabled() then
             local animalTargets = getEnabledTierAnimals()
+            
             if #animalTargets > 0 then
+                didSomething = true
                 local top = animalTargets[1]
                 print(string.format(
-                "Animal targets: %d | Highest: %s (≈ %s numeric)",
-                #animalTargets,
-                top.CoinBoostText,
-                top.CoinBoostNum >= 1e6 and string.format("%.1fM", top.CoinBoostNum/1e6) or
-                top.CoinBoostNum >= 1e3 and string.format("%.1fK", top.CoinBoostNum/1e3) or
-                tostring(top.CoinBoostNum)
+                    "Animal targets: %d | Highest: %s (≈ %s numeric)",
+                    #animalTargets,
+                    top.CoinBoostText,
+                    top.CoinBoostNum >= 1e6 and string.format("%.1fM", top.CoinBoostNum/1e6) or
+                    top.CoinBoostNum >= 1e3 and string.format("%.1fK", top.CoinBoostNum/1e3) or
+                    tostring(top.CoinBoostNum)
                 ))
-
+                
                 for _, data in ipairs(animalTargets) do
-                    teleportAndInteract(data.Model, data.Prompt)
-                    task.wait(2.2)
+                    -- Double-check toggle is still on (in case toggled during loop)
+                    if animalToggles[data.Tier] then
+                        teleportAndInteract(data.Model, data.Prompt)
+                        task.wait(2.2)
+                    end
                 end
             end
         end
-
-        -- Eggs
+        
+        -- ── Egg farming ─────────────────────────────────────
         if anyEggAutoEnabled() then
             local eggTargets = getEnabledEggs()
+            
             if #eggTargets > 0 then
+                didSomething = true
                 print("Egg targets: " .. #eggTargets .. " | First: " .. eggTargets[1].Name)
+                
                 for _, data in ipairs(eggTargets) do
                     teleportAndInteract(data.Model, data.Prompt)
                     task.wait(2.5)
                 end
             end
         end
-
-        task.wait(4.5)
+        
+        -- Smart wait: shorter if we did work, longer if idle
+        if didSomething then
+            task.wait(4.5)
+        else
+            task.wait(6)   -- idle when both systems are off
+        end
     end
 end)
 
-print("✅ Auto Animal (fixed CoinBoost priority) + Auto Eggs running")
+print("✅ Auto Animal (fixed toggle behavior + CoinBoost priority) + Auto Eggs running")
