@@ -1,0 +1,323 @@
+-- Zaporium GUI + Auto-Collect Animals (CoinBoost priority FIXED) + Auto-Farm Specific Eggs
+
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Create main window
+local Window = library:CreateWindow("Escape Mad Beasts")
+
+-- Main folder (animal features)
+local Main = Window:AddFolder("Main Features")
+
+-- Animal toggles
+local animalToggles = {
+    Mythical  = false,
+    Divine    = false,
+    Secret    = false,
+    Exclusive = false,
+}
+
+Main:AddToggle({
+    text = "Auto Mythical",
+    state = false,
+    callback = function(v)
+        animalToggles.Mythical = v
+        print("Auto Mythical:", v and "ENABLED" or "DISABLED")
+    end
+})
+
+Main:AddToggle({
+    text = "Auto Divine",
+    state = false,
+    callback = function(v)
+        animalToggles.Divine = v
+        print("Auto Divine:", v and "ENABLED" or "DISABLED")
+    end
+})
+
+Main:AddToggle({
+    text = "Auto Secret",
+    state = false,
+    callback = function(v)
+        animalToggles.Secret = v
+        print("Auto Secret:", v and "ENABLED" or "DISABLED")
+    end
+})
+
+Main:AddToggle({
+    text = "Auto Exclusive",
+    state = false,
+    callback = function(v)
+        animalToggles.Exclusive = v
+        print("Auto Exclusive:", v and "ENABLED" or "DISABLED")
+    end
+})
+
+Main:AddLabel({text = "Made by Zappisme"})
+
+-- Egg farm folder
+local EggFarm = Window:AddFolder("Farm Egg")
+
+local eggToggles = {
+    DivineVoidEgg     = false,
+    MythicalTreeEgg   = false,
+    MythicalEgg       = false,
+}
+
+EggFarm:AddToggle({
+    text = "Auto DivineVoidEgg",
+    state = false,
+    callback = function(v)
+        eggToggles.DivineVoidEgg = v
+        print("Auto DivineVoidEgg:", v and "ENABLED" or "DISABLED")
+    end
+})
+
+EggFarm:AddToggle({
+    text = "Auto MythicalTreeEgg",
+    state = false,
+    callback = function(v)
+        eggToggles.MythicalTreeEgg = v
+        print("Auto MythicalTreeEgg:", v and "ENABLED" or "DISABLED")
+    end
+})
+
+EggFarm:AddToggle({
+    text = "Auto MythicalEgg",
+    state = false,
+    callback = function(v)
+        eggToggles.MythicalEgg = v
+        print("Auto MythicalEgg:", v and "ENABLED" or "DISABLED")
+    end
+})
+
+-- Initialize GUI
+library:Init()
+
+print("🚀 Zaporium GUI Loaded | Animal + Egg Auto-Farm Active")
+
+-- ────────────────────────────────────────────────
+--               SHARED FUNCTIONS
+-- ────────────────────────────────────────────────
+
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local homeCFrame = CFrame.new(4.19, 33.50, 37.51)
+
+local function findMountRoot()
+    local char = player.Character
+    if not char then return nil end
+
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+
+    for _, joint in ipairs(hrp:GetJoints()) do
+        if joint:IsA("Weld") or joint:IsA("Motor6D") or joint:IsA("WeldConstraint") then
+            local other = (joint.Part0 == hrp and joint.Part1) or (joint.Part1 == hrp and joint.Part0)
+            if other and other ~= hrp and other:IsDescendantOf(workspace) then
+                local possibleRoot = other.Parent:FindFirstChild("RootPart")
+                or other.Parent:FindFirstChild("PrimaryPart")
+                or other
+                if possibleRoot then return possibleRoot end
+            end
+        end
+    end
+
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum and hum.Seated and hum.SeatPart then
+        local seat = hum.SeatPart
+        local model = seat:FindFirstAncestorWhichIsA("Model")
+        if model then
+            return model.PrimaryPart or model:FindFirstChild("RootPart") or seat
+        end
+    end
+
+    return nil
+end
+
+local function teleportAndInteract(targetModel, promptObj)
+    local mountRoot = findMountRoot()
+    if not mountRoot then
+        warn("No mount detected → cannot reach target")
+        return false
+    end
+
+    local targetPos = targetModel.PrimaryPart
+    and targetModel.PrimaryPart.Position
+    or targetModel:GetPivot().Position
+
+    local offset = Vector3.new(math.random(-4,4), 7, math.random(-4,4))
+    mountRoot.CFrame = CFrame.new(targetPos + offset)
+
+    task.wait(0.9)
+
+    if promptObj and promptObj:IsA("ProximityPrompt") and promptObj.Enabled then
+        fireproximityprompt(promptObj)
+        task.wait(0.7)
+    end
+
+    mountRoot.CFrame = homeCFrame
+    task.wait(0.5)
+
+    return true
+end
+
+-- ────────────────────────────────────────────────
+--      IMPROVED COINBOOST PARSER (handles k/m/b)
+-- ────────────────────────────────────────────────
+
+local function parseCoinBoost(text)
+    if not text or text == "" then return 0 end
+
+    text = text:lower():gsub("%s+", ""):gsub("x$", ""):gsub(",", "")
+
+    local numStr, suffix = text:match("(%d+%.?%d*)([kmb]?)")
+    if not numStr then return 0 end
+
+    local num = tonumber(numStr)
+    if not num then return 0 end
+
+    if suffix == "b" or suffix:find("bil") then
+        return num * 1e9
+    elseif suffix == "m" then
+        return num * 1e6
+    elseif suffix == "k" then
+        return num * 1e3
+    else
+        return num
+    end
+end
+
+-- ────────────────────────────────────────────────
+--               ANIMAL COLLECTION
+-- ────────────────────────────────────────────────
+
+local function anyAnimalAutoEnabled()
+    return animalToggles.Mythical or animalToggles.Divine or animalToggles.Secret or animalToggles.Exclusive
+end
+
+local function getEnabledTierAnimals()
+    local targets = {}
+    local raceAnimals = workspace:FindFirstChild("RaceAnimals")
+    if not raceAnimals then return targets end
+
+    for _, animal in raceAnimals:GetChildren() do
+        local board = animal:FindFirstChild("RaceInfoBoard_" .. animal.Name)
+        local frame = board and board:FindFirstChild("Frame")
+        local tierFrame = frame and frame:FindFirstChild("Tier")
+        local coinFrame = frame and frame:FindFirstChild("CoinBoost")
+        local tierLabel = tierFrame and tierFrame:FindFirstChild("TextLabel")
+        local coinLabel = coinFrame and coinFrame:FindFirstChild("TextLabel")
+
+        local tierName = tierLabel and tierLabel:IsA("TextLabel") and tierLabel.Text or ""
+
+        if animalToggles[tierName] then
+            local coinText = coinLabel and coinLabel:IsA("TextLabel") and coinLabel.Text or "0"
+            local coinNum = parseCoinBoost(coinText)
+
+            local prompt = animal:FindFirstChild("RaceCollectPrompt_" .. animal.Name)
+            if prompt and prompt:IsA("ProximityPrompt") then
+                table.insert(targets, {
+                    Model         = animal,
+                    Tier          = tierName,
+                    CoinBoostNum  = coinNum,
+                    CoinBoostText = coinText,
+                    Prompt        = prompt
+                })
+            end
+        end
+    end
+
+    table.sort(targets, function(a, b)
+        return a.CoinBoostNum > b.CoinBoostNum
+    end)
+
+    return targets
+end
+
+-- ────────────────────────────────────────────────
+--               EGG FARMING
+-- ────────────────────────────────────────────────
+
+local EGG_PRIORITY = { "DivineVoidEgg", "MythicalTreeEgg", "MythicalEgg" }
+
+local function anyEggAutoEnabled()
+    return eggToggles.DivineVoidEgg or eggToggles.MythicalTreeEgg or eggToggles.MythicalEgg
+end
+
+local function getEnabledEggs()
+    local targets = {}
+    local raceEggs = workspace:FindFirstChild("RaceEggs")
+    if not raceEggs then return targets end
+
+    for _, egg in raceEggs:GetChildren() do
+        local board = egg:FindFirstChild("RaceInfoBoard_" .. egg.Name)
+        local frame = board and board:FindFirstChild("Frame")
+        local nameObj = frame and frame:FindFirstChild("Name")
+        local textLabel = nameObj and nameObj:FindFirstChild("TextLabel")
+
+        if textLabel and textLabel:IsA("TextLabel") then
+            local eggDisplayName = textLabel.Text
+            if eggToggles[eggDisplayName] then
+                local prompt = egg:FindFirstChildWhichIsA("ProximityPrompt")
+                table.insert(targets, {
+                    Model  = egg,
+                    Name   = eggDisplayName,
+                    Prompt = prompt
+                })
+            end
+        end
+    end
+
+    table.sort(targets, function(a, b)
+        local prioA = table.find(EGG_PRIORITY, a.Name) or 999
+        local prioB = table.find(EGG_PRIORITY, b.Name) or 999
+        return prioA < prioB
+    end)
+
+    return targets
+end
+
+-- ────────────────────────────────────────────────
+--               MAIN LOOP
+-- ────────────────────────────────────────────────
+
+spawn(function()
+    while true do
+        -- Animals
+        if anyAnimalAutoEnabled() then
+            local animalTargets = getEnabledTierAnimals()
+            if #animalTargets > 0 then
+                local top = animalTargets[1]
+                print(string.format(
+                "Animal targets: %d | Highest: %s (≈ %s numeric)",
+                #animalTargets,
+                top.CoinBoostText,
+                top.CoinBoostNum >= 1e6 and string.format("%.1fM", top.CoinBoostNum/1e6) or
+                top.CoinBoostNum >= 1e3 and string.format("%.1fK", top.CoinBoostNum/1e3) or
+                tostring(top.CoinBoostNum)
+                ))
+
+                for _, data in ipairs(animalTargets) do
+                    teleportAndInteract(data.Model, data.Prompt)
+                    task.wait(2.2)
+                end
+            end
+        end
+
+        -- Eggs
+        if anyEggAutoEnabled() then
+            local eggTargets = getEnabledEggs()
+            if #eggTargets > 0 then
+                print("Egg targets: " .. #eggTargets .. " | First: " .. eggTargets[1].Name)
+                for _, data in ipairs(eggTargets) do
+                    teleportAndInteract(data.Model, data.Prompt)
+                    task.wait(2.5)
+                end
+            end
+        end
+
+        task.wait(4.5)
+    end
+end)
+
+print("✅ Auto Animal (fixed CoinBoost priority) + Auto Eggs running")
