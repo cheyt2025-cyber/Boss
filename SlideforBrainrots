@@ -1,0 +1,350 @@
+-- Zaporium GUI - FULL VERSION with Farm LuckyBlocks Auto Farm (exact safe logic)
+
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+local Window = library:CreateWindow("Slide for Brainrots")
+
+-- ────────────────────────────────────────────────
+-- Folder 1: Main Features (Brainrots farm - unchanged)
+-- ────────────────────────────────────────────────
+
+local MainFeatures = Window:AddFolder("Main Features")
+
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService        = game:GetService("RunService")
+local TweenService      = game:GetService("TweenService")
+
+local player            = Players.LocalPlayer
+local brainrotsFolder   = workspace:WaitForChild("Gameplay"):WaitForChild("Brainrots", 15)
+local event             = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("EventManagerClient"):WaitForChild("ServerEvent")
+
+local autoGodlyRunning  = false
+local autoSecretRunning = false
+
+-- Clean name lists (for Brainrots)
+local SECRET_CLEAN = {
+    "Swag Soda", "Dragon Cannelloni", "Strawberry Elephant", "Chillin Chili",
+    "Agarrini La Pallini", "Chicleteira Bicicleteira", "Karkerkar Kurkur",
+    "Esok Sekolah", "Pot Hotspot", "La Grande Combinasion", "Triplito Tralaleritos",
+}
+
+local GODLY_CLEAN = {
+    "Torrtuginni Dragonfrutini", "Balerino Lololo", "Pakrahmatmamat", "Pakrahmatmatina",
+    "Cavallo Virtuoso", "La Vacca Saturno Saturnita", "67", "Job Job Job Sahur",
+    "Lerulerulerule", "Tigroligre Frutonni", "Strawberrelli Flamingelli", "Madung",
+}
+
+local secretLookup = {}
+for _, v in ipairs(SECRET_CLEAN) do secretLookup[v] = true end
+
+local godlyLookup = {}
+for _, v in ipairs(GODLY_CLEAN) do godlyLookup[v] = true end
+
+-- Brainrots helpers (unchanged from previous)
+local function cleanName(raw)
+    if typeof(raw) ~= "string" then return "" end
+    local cleaned = raw:match("^%d+%s*_+%s*(.+)$") or raw
+    return cleaned:match("^%s*(.-)%s*$") or cleaned
+end
+
+local function getBrainrotInfo(model)
+    if not model:IsA("Model") then return nil end
+
+    local nameGui = model:FindFirstChild("Mesh", true)
+    and model.Mesh:FindFirstChild("BUI_Brainrot", true)
+    and model.Mesh.BUI_Brainrot:FindFirstChild("Main", true)
+    and model.Mesh.BUI_Brainrot.Main
+
+    if not nameGui then return nil end
+
+    local nameTxt = nameGui:FindFirstChild("NameTxt")
+    if not (nameTxt and nameTxt:IsA("TextLabel")) then return nil end
+
+    local clean = cleanName(nameTxt.Text)
+
+    local rarity
+    if secretLookup[clean] then rarity = "Secret"
+    elseif godlyLookup[clean] then rarity = "Godly" end
+
+    if not rarity then return nil end
+
+    local prompt = model:FindFirstChild("Mesh", true)
+    and model.Mesh:FindFirstChild("ProximityPrompt", true)
+
+    return {
+        Model     = model,
+        Rarity    = rarity,
+        CleanName = clean,
+        Prompt    = prompt and prompt:IsA("ProximityPrompt") and prompt or nil,
+    }
+end
+
+local function teleportTo(pos)
+    local char = player.Character
+    if not char then return false end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    hrp.CFrame = CFrame.new(pos) * CFrame.new(0, 4, 0)
+    print("Teleported to: " .. tostring(pos))
+    return true
+end
+
+local function spamClaim()
+    local start = tick()
+    local count = 0
+    while tick() - start < 6.1 do
+        pcall(function() event:FireServer("ClaimBrainrots") end)
+        count = count + 1
+        task.wait(0.15)
+    end
+    print("Claim spam done (" .. count .. " fires)")
+end
+
+local function forceTeleportToArea()
+    local startPos = Vector3.new(567.69, -3258.27, 10453.23)
+    local attempts = 0
+    while attempts < 6 do
+        if teleportTo(startPos) then
+            task.wait(2.2)
+            return
+        end
+        attempts = attempts + 1
+        task.wait(1)
+    end
+end
+
+local function farmLoop(rarity)
+    while (rarity == "Godly" and autoGodlyRunning) or (rarity == "Secret" and autoSecretRunning) do
+        forceTeleportToArea()
+        local found = false
+        for _, child in ipairs(brainrotsFolder:GetChildren()) do
+            local info = getBrainrotInfo(child)
+            if info and info.Prompt and info.Rarity == rarity then
+                found = true
+                print("★ " .. info.Rarity .. " → " .. info.CleanName)
+                local rootPart = info.Model:FindFirstChild("Mesh") or info.Model.PrimaryPart
+                local targetPos = rootPart and rootPart.Position or info.Model:GetPivot().Position
+                teleportTo(targetPos)
+                task.wait(0.6)
+                if info.Prompt.Enabled then
+                    fireproximityprompt(info.Prompt)
+                end
+                spamClaim()
+                task.wait(1.5)
+                break
+            end
+        end
+        if not found then
+            task.wait(2.2)
+        end
+        RunService.Heartbeat:Wait()
+    end
+end
+
+MainFeatures:AddToggle({
+    text = "Auto Godly",
+    state = false,
+    callback = function(value)
+        autoGodlyRunning = value
+        if value then
+            forceTeleportToArea()
+            coroutine.wrap(farmLoop)("Godly")
+        end
+    end
+})
+
+MainFeatures:AddToggle({
+    text = "Auto Secret",
+    state = false,
+    callback = function(value)
+        autoSecretRunning = value
+        if value then
+            forceTeleportToArea()
+            coroutine.wrap(farmLoop)("Secret")
+        end
+    end
+})
+
+MainFeatures:AddLabel({text = "Made by Zappisme"})
+
+-- ────────────────────────────────────────────────
+-- NEW Folder: Farm LuckyBlocks
+-- ────────────────────────────────────────────────
+
+local LuckyFolder = Window:AddFolder("Farm LuckyBlocks")
+
+local autoLuckyRunning = false
+
+local targetNames = {"SecretLuckyBlock", "GodlyLuckyBlock", "LegendaryLuckyBlock", "Secret", "Godly"}
+local remote = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("EventManagerClient"):WaitForChild("ServerEvent")
+
+local FLOAT_HEIGHT = 30
+local SAFE_DISTANCE = 35
+local SPAM_DURATION = 5
+
+local function getRarity(obj)
+    local mesh = obj:FindFirstChild("Mesh")
+    if not mesh then return nil end
+    local bui = mesh:FindFirstChild("BUI_Brainrot")
+    if not bui then return nil end
+    local main = bui:FindFirstChild("Main")
+    if not main then return nil end
+    local txt = main:FindFirstChild("RarityTxt")
+    return (txt and txt:IsA("TextLabel")) and txt.Text or nil
+end
+
+local function getSafeLandingCFrame(obj)
+    local blockPos = obj:GetPivot().Position
+    local direction = Vector3.new(math.random(-5,5), 50, SAFE_DISTANCE + math.random(-8,8))
+    local startPos = blockPos + direction
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    raycastParams.FilterDescendantsInstances = {player.Character}
+
+    local rayResult = workspace:Raycast(startPos, Vector3.new(0, -100, 0), raycastParams)
+    if rayResult then
+        local groundY = rayResult.Position.Y + 6
+        return CFrame.new(blockPos.X + direction.X, groundY, blockPos.Z + direction.Z)
+    else
+        return CFrame.new(blockPos.X + direction.X, blockPos.Y + 10, blockPos.Z + direction.Z)
+    end
+end
+
+-- Character respawn cleanup
+player.CharacterAdded:Connect(function(char)
+    task.wait(1)
+    local hrp = char:WaitForChild("HumanoidRootPart", 5)
+    if hrp then
+        hrp.Anchored = false
+    end
+end)
+
+local function luckyFarmLoop()
+    while autoLuckyRunning do
+        local char = player.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChild("Humanoid")
+        if not hrp or not hum or hum.Health <= 0 then
+            task.wait(1)
+            continue
+        end
+
+        local targets = {}
+        for _, obj in ipairs(brainrotsFolder:GetChildren()) do
+            local name = obj.Name
+            if table.find(targetNames, name) then
+                local rarity = getRarity(obj) or name
+                if rarity:match("Secret") or rarity:match("Godly") or rarity:match("Legendary") then
+                    table.insert(targets, {obj = obj, name = name, rarity = rarity})
+                end
+            end
+        end
+
+        if #targets == 0 then
+            task.wait(0.5)
+            continue
+        end
+
+        -- Priority sort: Secret > Godly > Legendary
+        table.sort(targets, function(a, b)
+            local prioA = (a.rarity:find("Secret") and 3) or (a.rarity:find("Godly") and 2) or 1
+            local prioB = (b.rarity:find("Secret") and 3) or (b.rarity:find("Godly") and 2) or 1
+            return prioA > prioB or (prioA == prioB and #a.name > #b.name)
+        end)
+
+        local best = targets[1]
+        local obj = best.obj
+        print("🎯 [SAFE FARM] Targeting: " .. best.rarity .. " (" .. obj.Name .. ")")
+
+        local offsets = {
+            CFrame.new(0, 3, -6),
+            CFrame.new(0, 5, -4),
+            CFrame.new(0, 4, -8),
+            CFrame.new(2, 3, -5),
+            CFrame.new(-2, 3, -5)
+        }
+
+        local promptTriggered = false
+        hrp.Anchored = false
+
+        for i, offset in ipairs(offsets) do
+            hrp.CFrame = obj:GetPivot() * offset
+            print("Teleport #" .. i)
+            task.wait(1.6)
+
+            local mainFolder = obj:FindFirstChild("Main")
+            local targetPrompt = mainFolder and mainFolder:FindFirstChild("ProximityPrompt")
+
+            if targetPrompt and targetPrompt.Enabled then
+                print("✅ PROMPT TRIGGERED!")
+                pcall(function()
+                    targetPrompt:InputHoldBegin()
+                    task.wait(targetPrompt.HoldDuration + 0.3)
+                    targetPrompt:InputHoldEnd()
+                end)
+                promptTriggered = true
+                break
+            end
+        end
+
+        -- Float up + anchor
+        local upTarget = hrp.CFrame + Vector3.new(0, FLOAT_HEIGHT, 0)
+        local floatUp = TweenService:Create(hrp, TweenInfo.new(0.9, Enum.EasingStyle.Quart), {CFrame = upTarget})
+        floatUp:Play()
+        floatUp.Completed:Wait()
+
+        hrp.Anchored = true
+        print("🛫 ANCHORED @ +" .. FLOAT_HEIGHT .. " — INVINCIBLE!")
+
+        -- Spam
+        local start = tick()
+        while tick() - start < SPAM_DURATION do
+            pcall(function()
+                remote:FireServer("ClaimBrainrots")
+            end)
+            task.wait(0.08)
+        end
+        print("💰 5s SPAM DONE!")
+
+        -- Safe escape
+        local safeLandCFrame = getSafeLandingCFrame(obj)
+        print("📍 Safe land @ " .. tostring(safeLandCFrame.Position))
+
+        local farHigh = safeLandCFrame + Vector3.new(0, 15, 0)
+        local escapeTween = TweenService:Create(hrp, TweenInfo.new(1.2, Enum.EasingStyle.Quart), {CFrame = farHigh})
+        escapeTween:Play()
+        escapeTween.Completed:Wait()
+
+        local landTween = TweenService:Create(hrp, TweenInfo.new(1.5, Enum.EasingStyle.Bounce, Enum.EasingDirection.Out), {CFrame = safeLandCFrame})
+        landTween:Play()
+        landTween.Completed:Wait()
+
+        hrp.Anchored = false
+        print("✅ [CYCLE COMPLETE] Landed safe — Guards BTFO!")
+
+        task.wait(0.6)
+    end
+    print("[LuckyBlocks Auto Farm] Stopped")
+end
+
+LuckyFolder:AddToggle({
+    text = "Auto Farm",
+    state = false,
+    callback = function(value)
+        autoLuckyRunning = value
+        if value then
+            print("[LuckyBlocks Auto Farm] → ON")
+            coroutine.wrap(luckyFarmLoop)()
+        else
+            print("[LuckyBlocks Auto Farm] → OFF")
+        end
+    end
+})
+
+LuckyFolder:AddLabel({text = "Safe LuckyBlocks Farm"})
+
+-- Init GUI
+library:Init()
+
+print("Zaporium GUI loaded - Brainrots + LuckyBlocks Auto Farm ready")
