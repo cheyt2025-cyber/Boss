@@ -1,0 +1,280 @@
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+local Window = library:CreateWindow("Sail for Brainrots")
+
+local autoHighestEnabled = false
+local autoCosmicEnabled  = false
+
+local function updateFlyState()
+    if autoHighestEnabled or autoCosmicEnabled then
+        if not FLYING then
+            START_FLY()
+            print("Fly ENABLED")
+        end
+    else
+        if FLYING then
+            NOFLY()
+            print("Fly DISABLED")
+            if root and root.Parent then
+                root.CFrame = SAFE_POSITION
+                print("Forced back to safe on disable")
+            end
+        end
+    end
+end
+
+Window:AddToggle({
+    text = "Auto Highest Income",
+    state = false,
+    flag = "autohighestincome",
+    callback = function(value)
+        autoHighestEnabled = value
+        print("Auto Highest:", value and "ON" or "OFF")
+        updateFlyState()
+    end
+})
+
+Window:AddToggle({
+    text = "Auto CosmicBlock",
+    state = false,
+    flag = "autocomicblock",
+    callback = function(value)
+        autoCosmicEnabled = value
+        print("Auto CosmicBlock:", value and "ON" or "OFF")
+        updateFlyState()
+    end
+})
+
+Window:AddLabel({ text = "Made by Zappisme" })
+
+library:Init()
+
+print("GUI Loaded")
+
+-- ──────────────────────────────────────────────────────────────
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local root = character:WaitForChild("HumanoidRootPart")
+
+local SAFE_POSITION = CFrame.new(80.76, 3.00, 0.76)
+
+local objectsFolder = workspace:WaitForChild("Zones", 8)
+    :WaitForChild("Zone13", 5)
+    :WaitForChild("Objects", 5)
+
+if not objectsFolder then
+    warn("Zone13.Objects not found")
+    return
+end
+
+local FLYING = false
+local flySpeed = 80
+local connections = {}
+
+local function getRoot(char)
+    return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso")
+end
+
+local function NOFLY()
+    FLYING = false
+    
+    -- Disconnect EVERYTHING
+    for _, conn in ipairs(connections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    table.clear(connections)
+    
+    local char = player.Character
+    if char then
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.PlatformStand = false
+            task.wait(0.05)  -- tiny delay helps replication
+            hum.PlatformStand = false  -- force twice
+        end
+        
+        local rt = getRoot(char)
+        if rt then
+            -- Destroy ALL BodyMovers (more aggressive)
+            for _, v in pairs(rt:GetChildren()) do
+                if v:IsA("BodyMover") or v:IsA("BodyGyro") or v:IsA("BodyVelocity") or v:IsA("BodyPosition") or v:IsA("AlignPosition") then
+                    pcall(function() v:Destroy() end)
+                end
+            end
+        end
+    end
+    
+    pcall(function()
+        workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+    end)
+    
+    print("NOFLY executed - should be normal now")
+end
+
+local function START_FLY()
+    NOFLY() -- clean slate
+    
+    local char = player.Character
+    if not char then return end
+    
+    local hum = char:WaitForChild("Humanoid", 5)
+    local rt = getRoot(char)
+    if not hum or not rt then return end
+    
+    local BG = Instance.new("BodyGyro")
+    BG.P = 90000
+    BG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    BG.CFrame = rt.CFrame
+    BG.Parent = rt
+    
+    local BV = Instance.new("BodyVelocity")
+    BV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+    BV.Velocity = Vector3.new()
+    BV.Parent = rt
+    
+    FLYING = true
+    hum.PlatformStand = true
+    
+    table.insert(connections, RunService.RenderStepped:Connect(function()
+        if not FLYING then return end
+        local cam = workspace.CurrentCamera
+        BG.CFrame = cam.CFrame
+        
+        local moveDir = hum.MoveDirection
+        if moveDir.Magnitude > 0 then
+            local worldMove = cam.CFrame:VectorToWorldSpace(moveDir)
+            BV.Velocity = worldMove * flySpeed
+        else
+            BV.Velocity = Vector3.new()
+        end
+    end))
+end
+
+-- Value parsing + findTarget (unchanged from your last version)
+local possibleInnerParts = {"Mesh", "Root", "Handle", "Main", "PrimaryPart", "Base", "Part"}
+
+local function parseValue(text)
+    if not text or text == "" then return 0 end
+    text = text:gsub(",", ""):upper():gsub(" ", "")
+    local num = tonumber(text:match("([%d%.]+)"))
+    if not num then return 0 end
+    if text:find("K") then return num * 1000 end
+    if text:find("M") then return num * 1000000 end
+    if text:find("B") then return num * 1000000000 end
+    if text:find("T") then return num * 1e12 end
+    return num
+end
+
+local function findTarget()
+    local bestModel, bestValue, bestPrompt = nil, -1, nil
+    
+    for _, model in ipairs(objectsFolder:GetChildren()) do
+        if not model:IsA("Model") then continue end
+        
+        local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
+        if not prompt then continue end
+        
+        if autoCosmicEnabled then
+            if model.Name ~= "Cosmic" then continue end
+        else
+            if model.Name == "Cosmic" then continue end
+        end
+        
+        local foundValue = 0
+        for _, partName in ipairs(possibleInnerParts) do
+            local part = model:FindFirstChild(partName)
+            if not part then continue end
+            local info = part:FindFirstChild("ObjectInfo")
+            if not info then continue end
+            local valFolder = info:FindFirstChild("Value")
+            if not valFolder then continue end
+            local label = valFolder:FindFirstChild("ValueLabel")
+            if not label or not label:IsA("TextLabel") then continue end
+            if not label:FindFirstChild("UIStroke") then continue end
+            
+            foundValue = parseValue(label.Text)
+            break
+        end
+        
+        if autoCosmicEnabled then
+            if foundValue > 0 then
+                bestModel = model
+                bestValue = foundValue
+                bestPrompt = prompt
+                break
+            end
+        else
+            if foundValue > bestValue then
+                bestValue = foundValue
+                bestModel = model
+                bestPrompt = prompt
+            end
+        end
+    end
+    return bestModel, bestValue, bestPrompt
+end
+
+-- Farm loop with extra safety
+task.spawn(function()
+    while true do
+        if not (autoHighestEnabled or autoCosmicEnabled) then
+            -- Safety: force disable fly every second if toggles off
+            if FLYING then
+                NOFLY()
+            end
+            task.wait(1)
+            continue
+        end
+        
+        if not FLYING then
+            START_FLY()
+        end
+        
+        local bestModel, bestValue, bestPrompt = findTarget()
+        
+        if not bestModel or not bestPrompt then
+            task.wait(3)
+            continue
+        end
+        
+        local modeName = autoCosmicEnabled and "CosmicBlock" or "Highest Income"
+        print("\n🎯 [" .. modeName .. "] → " .. bestModel.Name .. " | Val: " .. bestValue)
+        
+        local targetPart = bestModel.PrimaryPart or bestModel:FindFirstChild("Mesh") or bestModel:FindFirstChild("Root") or bestModel:FindFirstChild("Handle")
+        local hoverCFrame = targetPart and (targetPart.CFrame * CFrame.new(0, 3, -4)) or (bestModel:GetPivot() * CFrame.new(0, 4, -5))
+        
+        root.CFrame = hoverCFrame - Vector3.new(0, 0, 10)
+        task.wait(0.1)
+        
+        workspace.CurrentCamera.CFrame = CFrame.new(root.Position, bestModel:GetPivot().Position)
+        task.wait(0.4)
+        
+        fireproximityprompt(bestPrompt)
+        print("Collected: " .. bestModel.Name)
+        
+        task.wait(1.8)
+        
+        root.CFrame = SAFE_POSITION
+        print("Back to safe")
+        
+        task.wait(2.0)
+    end
+end)
+
+player.CharacterAdded:Connect(function(newChar)
+    task.wait(1)
+    character = newChar
+    humanoid = newChar:WaitForChild("Humanoid")
+    root = newChar:WaitForChild("HumanoidRootPart")
+    if autoHighestEnabled or autoCosmicEnabled then
+        START_FLY()
+    else
+        NOFLY()
+    end
+end)
+
+print("Fixed fly script running")
