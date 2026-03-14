@@ -336,7 +336,7 @@ Window:AddToggle({
     end
 })
 
-Window:AddLabel({text = "Made by Zapp IsMe - Enhanced by Grok"})
+Window:AddLabel({text = "Made by Zapp IsMe"})
 library:Init()
 
 -- Initial collector scan
