@@ -1,0 +1,326 @@
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+local Window = library:CreateWindow("Swing Obby Brainrot")
+
+-- ── Services ─────────────────────────────────────────
+local Players             = game:GetService("Players")
+local Workspace           = game:GetService("Workspace")
+local ReplicatedStorage   = game:GetService("ReplicatedStorage")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
+local player = Players.LocalPlayer
+local folder = Workspace:WaitForChild("VisualBrainrots")
+local zone10 = Workspace:WaitForChild("Zones"):WaitForChild("10")
+
+-- ── Variables ────────────────────────────────────────
+local autoHighestRunning = false
+local collectCashRunning = false
+local buyPowerRunning    = false
+local buyReachRunning    = false
+
+local lastCollected = nil
+local lastCollectedTime = 0
+local hasZoneTeleported = false   -- so zone10 teleport happens ONLY ONCE
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+--   AUTO HIGHEST💵 – FULL v4 LOGIC (exactly like your original script)
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+local function parseEarnings(text)
+    if not text then return 0 end
+    text = tostring(text):upper():gsub(",", ""):gsub(" ", "")
+    local num = tonumber(text:match("%d+%.?%d*")) or 0
+    if text:find("K") then num *= 1000
+    elseif text:find("M") then num *= 1000000
+    elseif text:find("B") then num *= 1000000000 end
+    return num
+end
+
+local function getModelData(model)
+    if not model:IsA("Model") then return nil end
+    local levelBoard = model:FindFirstChild("LevelBoard", true)
+    if not levelBoard then return nil end
+    local frame = levelBoard:FindFirstChild("Frame", true)
+    if not frame then return nil end
+    local earningsObj = frame:FindFirstChild("CurrencyFrame") and frame.CurrencyFrame:FindFirstChild("Earnings")
+    if not earningsObj then return nil end
+    local text = earningsObj.Text or tostring(earningsObj.Value or "0")
+    local num = parseEarnings(text)
+    return { model = model, earningsNum = num, earningsText = text }
+end
+
+local function findHighestEarningModel()
+    local best = nil
+    local bestValue = -math.huge
+    for _, child in ipairs(folder:GetChildren()) do
+        if child == lastCollected and tick() - lastCollectedTime < 4 then
+            continue
+        end
+        local data = getModelData(child)
+        if data and data.earningsNum > bestValue then
+            bestValue = data.earningsNum
+            best = data
+        end
+    end
+    return best
+end
+
+local function autoHighestLoop()
+    -- ONE-TIME zone teleport (only when first enabled)
+    if not hasZoneTeleported then
+        local char = player.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            local hrp = char.HumanoidRootPart
+            local zoneCFrame = zone10:IsA("Model") and zone10:GetPivot() or (zone10:IsA("BasePart") and zone10.CFrame)
+            if zoneCFrame then
+                hrp.CFrame = zoneCFrame * CFrame.new(0, 5, 0)
+                print("🚀 Started at Zones[10]")
+                task.wait(2.2)
+                hasZoneTeleported = true
+            end
+        end
+    end
+
+    while autoHighestRunning do
+        local char = player.Character
+        if not char or not char:FindFirstChild("HumanoidRootPart") then
+            task.wait(1)
+            continue
+        end
+        local hrp = char.HumanoidRootPart
+
+        local target = findHighestEarningModel()
+        if not target then
+            print("No targets right now...")
+            task.wait(3)
+            continue
+        end
+
+        print(string.format("→ FAST TARGET: %s | %s", target.model.Name, target.earningsText))
+
+        -- Direct teleport
+        local modelCFrame = target.model:GetPivot()
+        local offset = CFrame.new(0, 4, 8)
+        hrp.CFrame = modelCFrame * offset
+
+        task.wait(1.7)
+
+        -- Find prompt
+        local prompt = nil
+        for _, desc in ipairs(target.model:GetDescendants()) do
+            if desc:IsA("ProximityPrompt") then
+                prompt = desc
+                break
+            end
+        end
+        if not prompt then
+            prompt = Workspace:FindFirstChildWhichIsA("ProximityPrompt", true)
+        end
+
+        local holdTime = prompt and (prompt.HoldDuration + 0.25) or 1.35
+
+        -- Hold E
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+        task.wait(holdTime)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+
+        print("   Collected!")
+
+        lastCollected = target.model
+        lastCollectedTime = tick()
+
+        task.wait(3.5)
+    end
+end
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+--   COLLECT CASH (loop ~1s) – unchanged
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+local hasDetectedPlot = false
+local myPlotNumber
+
+local function fireTouch(toucher, target)
+    if not toucher or not target then return end
+    pcall(function()
+        firetouchinterest(toucher, target, 0)
+        task.wait(0.03)
+        firetouchinterest(toucher, target, 1)
+    end)
+end
+
+local function touchAllPods(plotNumber)
+    local plot = Workspace.Plots:FindFirstChild("Plot" .. plotNumber)
+    if not plot then return end
+    local podsFolder = plot:FindFirstChild("Pods")
+    if not podsFolder then return end
+    local character = player.Character
+    if not character then return end
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return end
+    for _, pod in ipairs(podsFolder:GetChildren()) do
+        local touchPart = pod:FindFirstChild("TouchPart")
+        if touchPart then
+            fireTouch(rootPart, touchPart)
+            for _, child in ipairs(touchPart:GetChildren()) do
+                if child.Name == "Upgrade" or child:IsA("BasePart") or child.Name:find("Touch") or child.Name:find("Surface") then
+                    fireTouch(rootPart, child)
+                end
+            end
+        end
+        task.wait(0.08)
+    end
+end
+
+local function detectMyPlot()
+    if hasDetectedPlot then return player:GetAttribute("MyPlotNumber") or myPlotNumber end
+    local character = player.Character or player.CharacterAdded:Wait()
+    local root = character:WaitForChild("HumanoidRootPart")
+    local plotsFolder = Workspace:WaitForChild("Plots")
+    local closestPlot, closestDist = nil, math.huge
+    for _, plot in ipairs(plotsFolder:GetChildren()) do
+        local spawnPart = plot:FindFirstChild("SpawnPart")
+        if spawnPart and spawnPart:IsA("BasePart") then
+            local dist = (root.Position - spawnPart.Position).Magnitude
+            if dist < closestDist then
+                closestDist = dist
+                closestPlot = plot
+            end
+        end
+    end
+    if closestPlot then
+        local num = tonumber(closestPlot.Name:match("%d+"))
+        if num then
+            myPlotNumber = num
+            player:SetAttribute("MyPlotNumber", num)
+            hasDetectedPlot = true
+            print("✅ Detected your plot → #" .. num)
+            return num
+        end
+    end
+    return nil
+end
+
+task.spawn(function() task.wait(1.5) detectMyPlot() end)
+player.CharacterAdded:Connect(function() task.wait(1.2) detectMyPlot() end)
+
+local function collectCashLoop()
+    while collectCashRunning and task.wait(1) do
+        if not myPlotNumber then detectMyPlot() end
+        if myPlotNumber then touchAllPods(myPlotNumber) end
+    end
+end
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+--   BUY POWER & BUY REACH (0.5s loop)
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+local upgradeRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("UpgradeStats")
+
+local function buyPowerLoop()
+    while buyPowerRunning and task.wait(0.5) do
+        pcall(function() upgradeRemote:FireServer("Power", 10) end)
+    end
+end
+
+local function buyReachLoop()
+    while buyReachRunning and task.wait(0.5) do
+        pcall(function() upgradeRemote:FireServer("Reach_Distance", 10) end)
+    end
+end
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+--   GUI ELEMENTS
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Window:AddToggle({
+    text = "Collect Cash",
+    state = false,
+    flag = "collectcash",
+    callback = function(value)
+        collectCashRunning = value
+        if value then
+            print("Collect Cash → ON")
+            if myPlotNumber then touchAllPods(myPlotNumber) end
+            task.spawn(collectCashLoop)
+        else
+            print("Collect Cash → OFF")
+        end
+    end
+})
+
+Window:AddToggle({
+    text = "Buy Power",
+    state = false,
+    flag = "buypower",
+    callback = function(value)
+        buyPowerRunning = value
+        if value then
+            print("Buy Power → ON (0.5s)")
+            task.spawn(buyPowerLoop)
+        else
+            print("Buy Power → OFF")
+        end
+    end
+})
+
+Window:AddToggle({
+    text = "Buy Reach",
+    state = false,
+    flag = "buyreach",
+    callback = function(value)
+        buyReachRunning = value
+        if value then
+            print("Buy Reach → ON (0.5s)")
+            task.spawn(buyReachLoop)
+        else
+            print("Buy Reach → OFF")
+        end
+    end
+})
+
+-- FIXED Auto Highest toggle (full original v4 logic)
+Window:AddToggle({
+    text = "Auto Highest💵",
+    state = false,
+    flag = "autohighest",
+    callback = function(value)
+        autoHighestRunning = value
+        if value then
+            print("🚀 Auto Highest → ENABLED (v4 full logic)")
+            hasZoneTeleported = false   -- allow zone teleport again if you want to reset
+            task.spawn(autoHighestLoop)
+        else
+            print("Auto Highest → DISABLED")
+        end
+    end
+})
+
+-- Teleport Buttons
+Window:AddButton({
+    text = "Go to 500x",
+    callback = function()
+        local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            hrp.CFrame = CFrame.new(9.69, -6.13, -10854.71)
+            print("→ Teleported to 500x")
+        end
+    end
+})
+
+Window:AddButton({
+    text = "Go to Spawn",
+    callback = function()
+        local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            hrp.CFrame = CFrame.new(27.39, -2.38, -44.46)
+            print("→ Teleported to Spawn")
+        end
+    end
+})
+
+Window:AddLabel({text = "Made by Zappisme"})
+
+library:Init()
+
+print("✅ Zaporium GUI FULLY FIXED – Auto Highest now works exactly like original v4!")
