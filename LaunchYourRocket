@@ -1,0 +1,220 @@
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Create main window
+local Window = library:CreateWindow("LaunchYourRocket")
+
+-- ────────────────────────────────────────────────
+-- SHARED VARIABLES & HELPERS
+-- ────────────────────────────────────────────────
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+
+local myPlotNumber = nil                    -- remembered once detected
+local fastClickConnection = nil
+local autoLaunchConnection = nil
+local isFastClickerEnabled = false
+local isAutoLaunchEnabled = false
+
+-- Plot detection
+local function detectCurrentPlot(character)
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    
+    local rayParams = RaycastParams.new()
+    rayParams.FilterDescendantsInstances = {character}
+    rayParams.FilterType = Enum.RaycastFilterType.Exclude
+    
+    local result = workspace:Raycast(hrp.Position, Vector3.new(0, -15, 0), rayParams)
+    if not result or not result.Instance then return nil end
+    
+    local pathFolder = result.Instance:FindFirstAncestor("Path")
+    if not pathFolder then return nil end
+    
+    if pathFolder.Parent
+        and pathFolder.Parent.Parent
+        and pathFolder.Parent.Parent == workspace.Map.Plots then
+        
+        local plotStr = pathFolder.Parent.Name
+        local plotNum = tonumber(plotStr)
+        if plotNum then
+            return plotNum
+        end
+    end
+    
+    return nil
+end
+
+local function tryDetectPlot()
+    if myPlotNumber then return end
+    if not player.Character then return end
+    
+    local plot = detectCurrentPlot(player.Character)
+    if plot then
+        myPlotNumber = plot
+        print("[Auto] Plot locked: #" .. myPlotNumber)
+    end
+end
+
+-- ────────────────────────────────────────────────
+-- FAST CLICKER (every ~0.05s)
+-- ────────────────────────────────────────────────
+
+local function startFastClicker()
+    if fastClickConnection then return end
+    if not myPlotNumber then return end
+
+    local Remote
+    pcall(function()
+        Remote = game:GetService("ReplicatedStorage")
+            :WaitForChild("Vrtx", 5)
+            :WaitForChild("Events", 5)
+            :WaitForChild("RE", 5)
+            :WaitForChild("tapButtonClick", 5)
+    end)
+
+    if not Remote then
+        warn("[Fast Clicker] Remote not found")
+        return
+    end
+
+    print("[Fast Clicker] Started @ ~0.05s")
+
+    local lastTime = tick()
+    fastClickConnection = RunService.Heartbeat:Connect(function()
+        local now = tick()
+        if now - lastTime >= 0.05 then
+            pcall(function()
+                Remote:FireServer(myPlotNumber)
+            end)
+            lastTime = now
+        end
+    end)
+end
+
+local function stopFastClicker()
+    if fastClickConnection then
+        fastClickConnection:Disconnect()
+        fastClickConnection = nil
+        print("[Fast Clicker] Stopped")
+    end
+end
+
+-- ────────────────────────────────────────────────
+-- AUTO LAUNCH (every 10s)
+-- ────────────────────────────────────────────────
+
+local function startAutoLaunch()
+    if autoLaunchConnection then return end
+    if not myPlotNumber then return end
+
+    local Remote
+    pcall(function()
+        Remote = game:GetService("ReplicatedStorage")
+            :WaitForChild("Vrtx", 5)
+            :WaitForChild("Events", 5)
+            :WaitForChild("RE", 5)
+            :WaitForChild("launchButtonClick", 5)
+    end)
+
+    if not Remote then
+        warn("[Auto Launch] Remote not found")
+        return
+    end
+
+    print("[Auto Launch] Started @ 10s interval")
+
+    local lastLaunch = tick() - 10  -- allow immediate first launch
+    autoLaunchConnection = RunService.Heartbeat:Connect(function()
+        local now = tick()
+        if now - lastLaunch >= 10 then
+            pcall(function()
+                Remote:FireServer(myPlotNumber)
+            end)
+            lastLaunch = now
+        end
+    end)
+end
+
+local function stopAutoLaunch()
+    if autoLaunchConnection then
+        autoLaunchConnection:Disconnect()
+        autoLaunchConnection = nil
+        print("[Auto Launch] Stopped")
+    end
+end
+
+-- ────────────────────────────────────────────────
+-- GUI TOGGLES
+-- ────────────────────────────────────────────────
+
+Window:AddToggle({
+    text = "Fast Clicker",
+    state = false,
+    callback = function(enabled)
+        isFastClickerEnabled = enabled
+        tryDetectPlot()  -- give one more chance when turning on
+        
+        if enabled then
+            if myPlotNumber then
+                startFastClicker()
+            else
+                warn("[Fast Clicker] Stand on your plot and toggle again")
+            end
+        else
+            stopFastClicker()
+        end
+    end
+})
+
+Window:AddToggle({
+    text = "Auto Launch",
+    state = false,
+    callback = function(enabled)
+        isAutoLaunchEnabled = enabled
+        tryDetectPlot()  -- give one more chance
+        
+        if enabled then
+            if myPlotNumber then
+                startAutoLaunch()
+            else
+                warn("[Auto Launch] Stand on your plot and toggle again")
+            end
+        else
+            stopAutoLaunch()
+        end
+    end
+})
+
+-- Credit label
+Window:AddLabel({text = "Made by Zappisme"})
+
+-- Initialize the GUI
+library:Init()
+
+print("Zaporium GUI Loaded | Fast Clicker + Auto Launch ready")
+
+-- ────────────────────────────────────────────────
+-- CHARACTER / SPAWN HANDLING
+-- ────────────────────────────────────────────────
+
+player.CharacterAdded:Connect(function(char)
+    task.wait(1.2)
+    tryDetectPlot()
+    
+    -- Restart features if they were enabled
+    if isFastClickerEnabled and myPlotNumber then
+        startFastClicker()
+    end
+    if isAutoLaunchEnabled and myPlotNumber then
+        startAutoLaunch()
+    end
+end)
+
+if player.Character then
+    task.spawn(function()
+        task.wait(1.2)
+        tryDetectPlot()
+    end)
+end
