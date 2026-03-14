@@ -1,0 +1,356 @@
+local player = game.Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+-- ==================== AUTO COLLECTOR CORE (unchanged) ====================
+local character = player.Character or player.CharacterAdded:Wait()
+local hrp = character:WaitForChild("HumanoidRootPart", 8)
+local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+local function updateCharacterReferences(newChar)
+    character = newChar
+    hrp = newChar:WaitForChild("HumanoidRootPart", 8)
+    humanoid = newChar:FindFirstChildOfClass("Humanoid")
+    print("Character respawned — references updated")
+end
+
+player.CharacterAdded:Connect(updateCharacterReferences)
+
+local function isCharacterReady()
+    return hrp and hrp.Parent and humanoid and humanoid.Parent and humanoid.Health > 0
+end
+
+local SPAWNED_ITEMS = workspace:WaitForChild("SpawnedItems", 10)
+if not SPAWNED_ITEMS then error("SpawnedItems not found!") end
+
+print("Auto Collector v4 - Collect Cash + Buy Upgrades + Auto Rebirth")
+
+local SAFE_ZONE = CFrame.new(406.81, 198.40, -417.02)
+
+-- Toggles
+local autoCollectCash = false
+local autoSecret = false
+local autoCosmic = false
+local autoExclusive = false
+local autoBuyUpgrades = false
+local autoRebirth = false
+
+-- QUEUE SYSTEM (unchanged)
+local collectionQueue = {}
+local isProcessing = false
+local currentItemBeingCollected = nil
+
+local function shouldCollect(rarity)
+    if rarity == "Secret" then return autoSecret end
+    if rarity == "Cosmic" then return autoCosmic end
+    if rarity == "Exclusive" then return autoExclusive end
+    return false
+end
+
+local function getRarity(item)
+    local success, result = pcall(function()
+        local mesh = item:FindFirstChildWhichIsA("MeshPart", true) or item:FindFirstChild("Mesh", true) or item:FindFirstChildWhichIsA("BasePart", true)
+        if not mesh then return nil end
+        local info = mesh:FindFirstChild("Info", true)
+        if not info then return nil end
+        local infoGui = info:FindFirstChild("InfoGui", true)
+        if not infoGui then return nil end
+        local rarityFrame = infoGui:FindFirstChild("Rarity", true)
+        if not rarityFrame then return nil end
+        
+        if rarityFrame:FindFirstChild("Secret") then return "Secret" end
+        if rarityFrame:FindFirstChild("Cosmic") then return "Cosmic" end
+        if rarityFrame:FindFirstChild("Exclusive") then return "Exclusive" end
+        return nil
+    end)
+    return success and result or nil
+end
+
+local function firePromptReliably(item)
+    local prompt = item:FindFirstChild("PickupPrompt", true)
+    if not (prompt and prompt:IsA("ProximityPrompt")) then
+        local mesh = item:FindFirstChild("Mesh", true) or item:FindFirstChildWhichIsA("MeshPart", true)
+        if mesh then prompt = mesh:FindFirstChild("PickupPrompt") end
+    end
+    if not (prompt and prompt:IsA("ProximityPrompt")) then return false end
+    
+    for i = 1, 10 do
+        fireproximityprompt(prompt)
+        task.wait(0.035)
+    end
+    return true
+end
+
+local function autoCollect(item, rarity)
+    if item.Parent ~= SPAWNED_ITEMS then return end
+    currentItemBeingCollected = {item = item, rarity = rarity}
+    
+    local attempts = 0
+    while not isCharacterReady() and attempts < 30 do
+        task.wait(0.3)
+        attempts += 1
+    end
+    
+    if not isCharacterReady() then
+        currentItemBeingCollected = nil
+        return
+    end
+    
+    local targetPart = item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart", true)
+    if not targetPart then 
+        currentItemBeingCollected = nil
+        return 
+    end
+    
+    if humanoid then humanoid.PlatformStand = true end
+    
+    local itemPos = targetPart.Position
+    local _, yaw, _ = hrp.CFrame:ToOrientation()
+    hrp.CFrame = CFrame.new(itemPos.X, 185, itemPos.Z) * CFrame.Angles(0, yaw, 0)
+    
+    local yLockConnection = RunService.Heartbeat:Connect(function()
+        if hrp and hrp.Parent then
+            local pos = hrp.Position
+            hrp.CFrame = CFrame.new(pos.X, 185, pos.Z) * hrp.CFrame.Rotation
+        end
+    end)
+    
+    task.wait(0.30)
+    local picked = firePromptReliably(item)
+    
+    local start = tick()
+    while item.Parent == SPAWNED_ITEMS and (tick() - start) < 2.8 do
+        task.wait(0.09)
+    end
+    
+    yLockConnection:Disconnect()
+    if hrp and hrp.Parent then hrp.CFrame = SAFE_ZONE end
+    if humanoid then humanoid.PlatformStand = false end
+    task.wait(0.25)
+    
+    if picked then
+        print("✅ Collected " .. rarity .. ": " .. item.Name)
+    else
+        print("⚠️ Failed: " .. item.Name)
+    end
+    
+    currentItemBeingCollected = nil
+end
+
+local function processNextItem()
+    if isProcessing or #collectionQueue == 0 then return end
+    isProcessing = true
+    local entry = table.remove(collectionQueue, 1)
+    autoCollect(entry.item, entry.rarity)
+    task.wait(0.1)
+    isProcessing = false
+    processNextItem()
+end
+
+local function scanAllAndQueue()
+    for _, item in ipairs(SPAWNED_ITEMS:GetChildren()) do
+        local rarity = getRarity(item)
+        if rarity and shouldCollect(rarity) then
+            local alreadyQueued = false
+            for _, q in ipairs(collectionQueue) do
+                if q.item == item then alreadyQueued = true break end
+            end
+            if not alreadyQueued then
+                table.insert(collectionQueue, {item = item, rarity = rarity})
+                print("Queued " .. rarity .. ": " .. item.Name)
+            end
+        end
+    end
+    processNextItem()
+end
+
+local function cleanQueueForRarity(rarityToRemove)
+    local newQueue = {}
+    for _, entry in ipairs(collectionQueue) do
+        if entry.rarity ~= rarityToRemove then
+            table.insert(newQueue, entry)
+        end
+    end
+    collectionQueue = newQueue
+    print("Cleaned queue: removed all pending " .. rarityToRemove .. " items")
+end
+
+SPAWNED_ITEMS.ChildAdded:Connect(function(newItem)
+    task.wait(0.25)
+    local rarity = getRarity(newItem)
+    if rarity and shouldCollect(rarity) then
+        print("Detected new " .. rarity .. ": " .. newItem.Name)
+        table.insert(collectionQueue, {item = newItem, rarity = rarity})
+        processNextItem()
+    end
+end)
+
+-- ==================== COLLECT CASH (your exact plot logic) ====================
+local MY_PLOT = nil
+
+local function isMyPlot(plot)
+    if not plot or not plot:IsDescendantOf(Workspace.Plots) then return false end
+    for _, obj in ipairs(plot:GetDescendants()) do
+        if obj:IsA("TextLabel") and obj.Text == "Upgrade Plot" then
+            return true
+        end
+    end
+    return false
+end
+
+local function tryFindMyPlot()
+    if MY_PLOT then return end
+    for _, plot in ipairs(Workspace.Plots:GetChildren()) do
+        if (plot:IsA("Model") or plot:IsA("Folder")) and isMyPlot(plot) then
+            MY_PLOT = plot
+            print("YOUR PLOT FOUND: " .. plot.Name)
+            return
+        end
+    end
+end
+
+task.spawn(function()
+    tryFindMyPlot()
+    for i = 1, 10 do
+        if MY_PLOT then break end
+        task.wait(2)
+        tryFindMyPlot()
+    end
+end)
+
+Workspace.Plots.ChildAdded:Connect(function(child)
+    task.wait(1.5)
+    if isMyPlot(child) then
+        MY_PLOT = child
+        print("YOUR PLOT FOUND (late): " .. child.Name)
+    end
+end)
+
+-- Collect Cash loop (runs every 1s ONLY when toggle is ON)
+task.spawn(function()
+    while true do
+        task.wait(1)
+        if not autoCollectCash or not MY_PLOT then continue end
+        
+        local buildFolder = MY_PLOT:FindFirstChild("Build")
+        if not buildFolder then continue end
+        local placeFolder = buildFolder:FindFirstChild("Place")
+        if not placeFolder then continue end
+        
+        for _, numFolder in ipairs(placeFolder:GetChildren()) do
+            if tonumber(numFolder.Name) then
+                local touchPart = numFolder:FindFirstChild("Touch")
+                if touchPart and touchPart:FindFirstChild("TouchInterest") then
+                    local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                    if root then
+                        firetouchinterest(root, touchPart, 0)
+                        task.wait(0.05)
+                        firetouchinterest(root, touchPart, 1)
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- ==================== BUY UPGRADES (0.5s loop when ON) ====================
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        if autoBuyUpgrades then
+            local args = {1}
+            game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("UpgradeSpeed"):FireServer(unpack(args))
+        end
+    end
+end)
+
+-- ==================== AUTO REBIRTH (2s loop when ON) ====================
+task.spawn(function()
+    while true do
+        task.wait(2)
+        if autoRebirth then
+            local args = {1}
+            game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("RebirthEvent"):FireServer(unpack(args))
+        end
+    end
+end)
+
+-- ==================== GUI (Collect Cash at the VERY TOP, then your old toggles, then new ones under them) ====================
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+local Window = library:CreateWindow("Escape Knockout 🧠Rot")
+
+Window:AddToggle({
+    text = "Collect Cash",
+    state = false,
+    callback = function(v)
+        autoCollectCash = v
+        print("Collect Cash: " .. (v and "ON" or "OFF"))
+    end
+})
+
+Window:AddToggle({
+    text = "Auto Secret",
+    state = false,
+    callback = function(v)
+        autoSecret = v
+        print("Auto Secret: " .. (v and "ON" or "OFF"))
+        if v then scanAllAndQueue() else cleanQueueForRarity("Secret") end
+    end
+})
+
+Window:AddToggle({
+    text = "Auto Cosmic",
+    state = false,
+    callback = function(v)
+        autoCosmic = v
+        print("Auto Cosmic: " .. (v and "ON" or "OFF"))
+        if v then scanAllAndQueue() else cleanQueueForRarity("Cosmic") end
+    end
+})
+
+Window:AddToggle({
+    text = "Auto Exclusive",
+    state = false,
+    callback = function(v)
+        autoExclusive = v
+        print("Auto Exclusive: " .. (v and "ON" or "OFF"))
+        if v then scanAllAndQueue() else cleanQueueForRarity("Exclusive") end
+    end
+})
+
+Window:AddToggle({
+    text = "Buy Upgrades",
+    state = false,
+    callback = function(v)
+        autoBuyUpgrades = v
+        print("Buy Upgrades: " .. (v and "ON" or "OFF"))
+    end
+})
+
+Window:AddToggle({
+    text = "Auto Rebirth",
+    state = false,
+    callback = function(v)
+        autoRebirth = v
+        print("Auto Rebirth: " .. (v and "ON" or "OFF"))
+    end
+})
+
+Window:AddLabel({text = "Made by Zapp IsMe - Enhanced by Grok"})
+library:Init()
+
+-- Initial collector scan
+task.spawn(function()
+    task.wait(1)
+    scanAllAndQueue()
+end)
+
+player.CharacterRemoving:Connect(function()
+    if currentItemBeingCollected then
+        table.insert(collectionQueue, 1, currentItemBeingCollected)
+        print("Death detected — re-queued interrupted item")
+        currentItemBeingCollected = nil
+    end
+end)
+
+print("✅ Full script loaded! Collect Cash (top), rarity toggles, Buy Upgrades & Auto Rebirth all working with instant ON/OFF")
