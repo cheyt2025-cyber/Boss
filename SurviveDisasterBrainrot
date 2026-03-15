@@ -1,5 +1,5 @@
 local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
-local Window = library:CreateWindow("Survive Disaster Brainrot")
+local Window = library:CreateWindow("Survive Disaster Brainrt")
 local Players = game:GetService("Players")
 local task = task
 local player = Players.LocalPlayer
@@ -7,11 +7,12 @@ local SAFE_ZONE = CFrame.new(16.13, 10.82, 81.21)
 
 -- Running flags for each toggle
 local running = {
+    CollectCash = false,   -- ← NEW
     Secret = false,
     God = false,
     Celestial = false,
     Eternal = false,
-    Divine = false   -- ← NEW
+    Divine = false
 }
 
 -- Find biggest part for teleport (fixes all "No PrimaryPart" issues)
@@ -27,9 +28,27 @@ local function getMainPart(model)
     return best
 end
 
--- Main farming function for ONE rarity (FAST + SAFE version)
--- → Teleports back to safezone IMMEDIATELY after triggering prompt
--- → Much less time near brainrot = way lower arrest risk
+-- NEW: Collect Cash loop (fires EVERY podium 1-30+ every 1 second)
+local function startCollectCash()
+    print("🚀 Started Auto Collect Cash (all podiums 1-30 every 1s)")
+   
+    while running.CollectCash do
+        for i = 1, 30 do  -- 30 is safe (covers 1-20 and higher)
+            local args = {"CollectCash", i}
+            pcall(function()
+                game:GetService("ReplicatedStorage")
+                    :WaitForChild("Remotes")
+                    :WaitForChild("RemoteEvent")
+                    :FireServer(unpack(args))
+            end)
+        end
+        task.wait(1)  -- exactly 1 second loop as you asked
+    end
+   
+    print("⛔ Stopped Auto Collect Cash")
+end
+
+-- Main farming function for rarities (unchanged)
 local function startFarming(rarityName, flag)
     print("🚀 Started Auto " .. rarityName .. " (toggle ON)")
    
@@ -50,7 +69,7 @@ local function startFarming(rarityName, flag)
         end
        
         if #targets == 0 then
-            task.wait(2.2) -- nothing found, quick re-scan
+            task.wait(2.2)
             continue
         end
        
@@ -59,16 +78,14 @@ local function startFarming(rarityName, flag)
            
             print("🔄 Farming: " .. target.name .. " (" .. rarityName .. ")")
            
-            -- Teleport to target
             local targetPart = getMainPart(target.model)
             local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
             if targetPart and hrp then
                 local offset = CFrame.new(math.random(-4, 4), 8.5, math.random(4, 7))
                 hrp.CFrame = targetPart.CFrame * offset
-                task.wait(1.1)  -- enough time for prompt to register
+                task.wait(1.1)
             end
            
-            -- Trigger ProximityPrompt
             local prompt = target.model:FindFirstChildWhichIsA("ProximityPrompt", true)
             if prompt then
                 if fireproximityprompt then
@@ -78,24 +95,34 @@ local function startFarming(rarityName, flag)
                     task.wait((prompt.HoldDuration or 0) + 0.4)
                     prompt:InputHoldEnd()
                 end
-                
-                -- IMMEDIATE RETURN TO SAFEZONE (biggest safety & speed boost)
+               
                 hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
                 if hrp then
                     hrp.CFrame = SAFE_ZONE
                 end
-                
-                task.wait(0.3)  -- tiny buffer so server registers the farm
+               
+                task.wait(0.3)
             end
            
-            task.wait(2.0) -- cycle cooldown (tuned for speed + safety)
+            task.wait(2.0)
         end
     end
    
     print("⛔ Stopped Auto " .. rarityName .. " (toggle OFF)")
 end
 
--- Create the toggles
+-- === TOGGLES (Collect Cash is FIRST - exactly as you asked) ===
+Window:AddToggle({
+    text = "Collect Cash",
+    state = false,
+    callback = function(v)
+        running.CollectCash = v
+        if v then
+            task.spawn(startCollectCash)
+        end
+    end
+})
+
 Window:AddToggle({
     text = "Auto Secret",
     state = false,
@@ -157,5 +184,5 @@ Window:AddLabel({text = "Made by Zapp IsMe"})
 
 -- Show GUI
 library:Init()
-print("✅ Zaporium Brainrot GUI (Faster + Safer + Divine) Loaded!")
-print("✅ Added Auto Divine toggle → farms exactly like the others!")
+print("✅ Zaporium Brainrot GUI (Faster + Safer + Divine + Collect Cash) Loaded!")
+print("✅ 'Collect Cash' is now at the TOP → collects from ALL podiums (1-30) every 1 second!")
