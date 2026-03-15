@@ -1,0 +1,161 @@
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+local Window = library:CreateWindow("Survive Disaster Brainrot")
+local Players = game:GetService("Players")
+local task = task
+local player = Players.LocalPlayer
+local SAFE_ZONE = CFrame.new(16.13, 10.82, 81.21)
+
+-- Running flags for each toggle
+local running = {
+    Secret = false,
+    God = false,
+    Celestial = false,
+    Eternal = false,
+    Divine = false   -- ← NEW
+}
+
+-- Find biggest part for teleport (fixes all "No PrimaryPart" issues)
+local function getMainPart(model)
+    if model.PrimaryPart then return model.PrimaryPart end
+    local best, bestSize = nil, 0
+    for _, v in ipairs(model:GetDescendants()) do
+        if v:IsA("BasePart") and v.Size.Magnitude > bestSize then
+            bestSize = v.Size.Magnitude
+            best = v
+        end
+    end
+    return best
+end
+
+-- Main farming function for ONE rarity (FAST + SAFE version)
+-- → Teleports back to safezone IMMEDIATELY after triggering prompt
+-- → Much less time near brainrot = way lower arrest risk
+local function startFarming(rarityName, flag)
+    print("🚀 Started Auto " .. rarityName .. " (toggle ON)")
+   
+    while running[flag] do
+        local storage = workspace:FindFirstChild("BrainrotStorage")
+        if not storage then
+            task.wait(2)
+            continue
+        end
+       
+        local targets = {}
+        for _, obj in ipairs(storage:GetChildren()) do
+            local gui = obj:FindFirstChild("OverheadGui", true)
+            local label = gui and gui:FindFirstChild("RarityLabel")
+            if label and label.Text == rarityName then
+                table.insert(targets, {model = obj, name = obj.Name})
+            end
+        end
+       
+        if #targets == 0 then
+            task.wait(2.2) -- nothing found, quick re-scan
+            continue
+        end
+       
+        for _, target in ipairs(targets) do
+            if not running[flag] then break end
+           
+            print("🔄 Farming: " .. target.name .. " (" .. rarityName .. ")")
+           
+            -- Teleport to target
+            local targetPart = getMainPart(target.model)
+            local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+            if targetPart and hrp then
+                local offset = CFrame.new(math.random(-4, 4), 8.5, math.random(4, 7))
+                hrp.CFrame = targetPart.CFrame * offset
+                task.wait(1.1)  -- enough time for prompt to register
+            end
+           
+            -- Trigger ProximityPrompt
+            local prompt = target.model:FindFirstChildWhichIsA("ProximityPrompt", true)
+            if prompt then
+                if fireproximityprompt then
+                    fireproximityprompt(prompt)
+                else
+                    prompt:InputHoldBegin()
+                    task.wait((prompt.HoldDuration or 0) + 0.4)
+                    prompt:InputHoldEnd()
+                end
+                
+                -- IMMEDIATE RETURN TO SAFEZONE (biggest safety & speed boost)
+                hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    hrp.CFrame = SAFE_ZONE
+                end
+                
+                task.wait(0.3)  -- tiny buffer so server registers the farm
+            end
+           
+            task.wait(2.0) -- cycle cooldown (tuned for speed + safety)
+        end
+    end
+   
+    print("⛔ Stopped Auto " .. rarityName .. " (toggle OFF)")
+end
+
+-- Create the toggles
+Window:AddToggle({
+    text = "Auto Secret",
+    state = false,
+    callback = function(v)
+        running.Secret = v
+        if v then
+            task.spawn(function() startFarming("Secret", "Secret") end)
+        end
+    end
+})
+
+Window:AddToggle({
+    text = "Auto God",
+    state = false,
+    callback = function(v)
+        running.God = v
+        if v then
+            task.spawn(function() startFarming("Brainrot God", "God") end)
+        end
+    end
+})
+
+Window:AddToggle({
+    text = "Auto Celestial",
+    state = false,
+    callback = function(v)
+        running.Celestial = v
+        if v then
+            task.spawn(function() startFarming("Celestial", "Celestial") end)
+        end
+    end
+})
+
+Window:AddToggle({
+    text = "Auto Eternal",
+    state = false,
+    callback = function(v)
+        running.Eternal = v
+        if v then
+            task.spawn(function() startFarming("Eternal", "Eternal") end)
+        end
+    end
+})
+
+-- NEW DIVINE TOGGLE
+Window:AddToggle({
+    text = "Auto Divine",
+    state = false,
+    callback = function(v)
+        running.Divine = v
+        if v then
+            task.spawn(function() startFarming("Divine", "Divine") end)
+        end
+    end
+})
+
+-- Credit
+Window:AddLabel({text = "Made by Zapp IsMe"})
+
+-- Show GUI
+library:Init()
+print("✅ Zaporium Brainrot GUI (Faster + Safer + Divine) Loaded!")
+print("✅ Added Auto Divine toggle → farms exactly like the others!")
