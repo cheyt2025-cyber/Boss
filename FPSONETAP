@@ -1,0 +1,300 @@
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Create main window
+local Window = library:CreateWindow("[FPS] One Tap")
+
+local instantKillEnabled = false
+local espEnabled = false
+
+-- Instant Kill Toggle
+Window:AddToggle({
+    text = "Instant Kill",
+    state = false,
+    callback = function(value)
+        instantKillEnabled = value
+        if not value then
+            if followConnection then
+                followConnection:Disconnect()
+                followConnection = nil
+            end
+            currentTarget = nil
+            resetCamera()
+        end
+    end
+})
+
+-- ESP Toggle (Players + Bots through walls)
+Window:AddToggle({
+    text = "ESP Player",
+    state = false,
+    callback = function(value)
+        espEnabled = value
+        if not value then clearAllESP() end
+    end
+})
+
+-- Your credit
+Window:AddLabel({text = "Made by Zappisme"})
+
+-- Initialize GUI
+library:Init()
+
+print("Zaporium GUI Loaded | Instant Kill + ESP Player ready!")
+
+-- ────────────────────────────────────────────────
+-- SERVICES & SETTINGS
+-- ────────────────────────────────────────────────
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+local DISTANCE = 4          -- studs behind target
+local HEIGHT_OFFSET = 0
+
+-- LOBBY DETECTION (only matters for real players)
+local lobbyModel = Workspace:FindFirstChild("Lobby")
+local lobbyCenter = nil
+local LOBBY_RADIUS = 200
+
+if lobbyModel then
+    pcall(function()
+        lobbyCenter = lobbyModel:GetPivot().Position
+    end)
+end
+
+local function isInLobby(model)
+    if not lobbyCenter then return false end
+    local hrp = model:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    return (hrp.Position - lobbyCenter).Magnitude <= LOBBY_RADIUS
+end
+
+local function isRealPlayer(model)
+    return Players:GetPlayerFromCharacter(model) ~= nil
+end
+
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+
+-- ────────────────────────────────────────────────
+-- TARGET SYSTEM (Real Players + Bots like Astration)
+-- ────────────────────────────────────────────────
+local allTargets = {}      -- list of character models (player chars + bot models)
+local currentIndex = 1
+
+local function updateAllTargets()
+    allTargets = {}
+    
+    -- Real players
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            table.insert(allTargets, plr.Character)
+        end
+    end
+    
+    -- Bots (Astration + any other dummy/bot models)
+    for _, obj in ipairs(Workspace:GetChildren()) do
+        if obj:IsA("Model")
+            and obj:FindFirstChild("Humanoid")
+            and obj:FindFirstChild("HumanoidRootPart")
+            and not isRealPlayer(obj) then   -- make sure it's not a real player char
+            
+            if obj.Name == "Astration"
+               or obj.Name:find("Astration")
+               or obj.Name:find("Bot")
+               or obj.Name:find("Dummy")
+               or obj.Name:find("NPC") then
+                table.insert(allTargets, obj)
+            end
+        end
+    end
+end
+
+updateAllTargets()
+
+-- Auto refresh targets
+Players.PlayerAdded:Connect(updateAllTargets)
+Players.PlayerRemoving:Connect(updateAllTargets)
+Workspace.ChildAdded:Connect(function(child)
+    task.wait(0.2)
+    if child:IsA("Model") and child:FindFirstChild("Humanoid") then
+        updateAllTargets()
+    end
+end)
+Workspace.ChildRemoved:Connect(updateAllTargets)
+
+-- ────────────────────────────────────────────────
+-- INSTANT KILL LOGIC (works on BOTH players & bots)
+-- ────────────────────────────────────────────────
+local followConnection = nil
+local currentTarget = nil
+
+local function isTargetAlive(model)
+    return model and model:FindFirstChild("HumanoidRootPart")
+        and model:FindFirstChild("Humanoid")
+        and model.Humanoid.Health > 0
+end
+
+local function resetCamera()
+    Camera.CameraType = Enum.CameraType.Custom
+end
+
+local function followTarget(model)
+    if followConnection then followConnection:Disconnect() end
+    currentTarget = model
+    Camera.CameraType = Enum.CameraType.Scriptable
+    
+    followConnection = RunService.Heartbeat:Connect(function()
+        if not instantKillEnabled 
+           or not isTargetAlive(model)
+           or (isRealPlayer(model) and isInLobby(LocalPlayer))
+           or (isRealPlayer(model) and isInLobby(model)) then
+            
+            if followConnection then followConnection:Disconnect() end
+            followConnection = nil
+            currentTarget = nil
+            resetCamera()
+            return
+        end
+        
+        local targetHRP = model.HumanoidRootPart
+        local targetHead = model:FindFirstChild("Head")
+        local myHRP = HumanoidRootPart
+        local myHead = Character:FindFirstChild("Head")
+        
+        -- Noclip
+        myHRP.CanCollide = false
+        
+        -- Position behind target
+        local targetPos = targetHRP.Position
+        local lookVector = targetHRP.CFrame.LookVector
+        local myPos = targetPos + Vector3.new(0, HEIGHT_OFFSET, 0) - (lookVector * DISTANCE)
+        
+        myHRP.CFrame = CFrame.lookAt(myPos, targetPos)
+        
+        -- Camera lock on head
+        local myEyePos = myHead and myHead.Position or (myHRP.Position + Vector3.new(0, 2, 0))
+        local targetLookPos = targetHead and targetHead.Position or (targetPos + Vector3.new(0, 1.5, 0))
+        Camera.CFrame = CFrame.lookAt(myEyePos, targetLookPos)
+    end)
+end
+
+-- Respawn handler
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    Character = newChar
+    HumanoidRootPart = newChar:WaitForChild("HumanoidRootPart")
+    task.wait(0.5)
+    resetCamera()
+    if instantKillEnabled and currentTarget and isTargetAlive(currentTarget) then
+        followTarget(currentTarget)
+    end
+end)
+
+-- Main cycling loop
+spawn(function()
+    while true do
+        task.wait(0.1)
+        
+        if not instantKillEnabled then
+            if followConnection then followConnection:Disconnect() end
+            currentTarget = nil
+            resetCamera()
+            continue
+        end
+        
+        if #allTargets == 0 then
+            resetCamera()
+            continue
+        end
+        
+        local found = false
+        for i = 1, #allTargets do
+            local index = (currentIndex + i - 2) % #allTargets + 1
+            local model = allTargets[index]
+            
+            if isTargetAlive(model) and not (isRealPlayer(model) and isInLobby(model)) then
+                followTarget(model)
+                currentIndex = index
+                found = true
+                break
+            end
+        end
+        
+        if found then
+            -- Wait until target dies or toggle off
+            repeat
+                task.wait(0.1)
+            until not instantKillEnabled or not isTargetAlive(currentTarget) or (isRealPlayer(currentTarget) and isInLobby(LocalPlayer))
+            
+            if followConnection then followConnection:Disconnect() end
+            followConnection = nil
+            currentTarget = nil
+            resetCamera()
+        else
+            resetCamera()
+        end
+    end
+end)
+
+-- ────────────────────────────────────────────────
+-- ESP PLAYER (Players + Bots) - Through Walls
+-- ────────────────────────────────────────────────
+local highlights = {}
+
+local function createESP(model)
+    if highlights[model] or not model or not model:FindFirstChild("HumanoidRootPart") then return end
+    
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "ZaporiumESP"
+    highlight.Adornee = model
+    highlight.FillColor = isRealPlayer(model) and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 50, 50)  -- green = player, red = bot
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.FillTransparency = 0.35
+    highlight.OutlineTransparency = 0
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop   -- SHOWS THROUGH WALLS
+    highlight.Parent = model
+    
+    highlights[model] = highlight
+end
+
+local function clearAllESP()
+    for _, hl in pairs(highlights) do
+        if hl and hl.Parent then hl:Destroy() end
+    end
+    highlights = {}
+end
+
+local function updateESP()
+    clearAllESP()
+    if not espEnabled then return end
+    
+    for _, model in ipairs(allTargets) do
+        if isTargetAlive(model) then
+            createESP(model)
+        end
+    end
+end
+
+-- Refresh ESP when needed
+spawn(function()
+    while task.wait(1.2) do
+        if espEnabled then
+            updateESP()
+        end
+    end
+end)
+
+Workspace.ChildAdded:Connect(function(child)
+    if espEnabled and child:IsA("Model") and child:FindFirstChild("Humanoid") then
+        task.wait(0.4)
+        updateAllTargets()
+        updateESP()
+    end
+end)
+
+print("🚀 Instant Kill (players + bots) ready!")
+print("✅ ESP Player ON → see everyone (including Astration bots) through walls!")
+print("Lobby radius:", LOBBY_RADIUS, "- tune if needed.")
