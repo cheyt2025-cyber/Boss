@@ -1,0 +1,242 @@
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Create main window
+local Window = library:CreateWindow("Crawl for Brainrot")
+
+-- ────────────────────────────────────────────────
+-- Upgrade toggles (at the top)
+
+local buySpeedLoop
+Window:AddToggle({
+    text = "Buy Speed +10",
+    state = false,
+    flag = "buy_speed_10",
+    callback = function(v)
+        if v then
+            buySpeedLoop = task.spawn(function()
+                local args = {"Stats1", 10}
+                local remote = game:GetService("ReplicatedStorage")
+                    :WaitForChild("Packages", 8)
+                    :WaitForChild("Net", 8)
+                    :WaitForChild("RE/RequestStatsUpgrade", 8)
+                
+                if not remote then warn("[Speed] Remote not found") return end
+                
+                while task.wait(0.5) do
+                    pcall(remote.FireServer, remote, unpack(args))
+                end
+            end)
+            print("Buy Speed +10 → ON")
+        else
+            if buySpeedLoop then task.cancel(buySpeedLoop) buySpeedLoop = nil end
+            print("Buy Speed +10 → OFF")
+        end
+    end
+})
+
+local buyHPLoop
+Window:AddToggle({
+    text = "Buy HP +10",
+    state = false,
+    flag = "buy_hp_10",
+    callback = function(v)
+        if v then
+            buyHPLoop = task.spawn(function()
+                local args = {"HealthStats", 10}
+                local remote = game:GetService("ReplicatedStorage")
+                    :WaitForChild("Packages", 8)
+                    :WaitForChild("Net", 8)
+                    :WaitForChild("RE/RequestStatsUpgrade", 8)
+                
+                if not remote then warn("[HP] Remote not found") return end
+                
+                while task.wait(0.5) do
+                    pcall(remote.FireServer, remote, unpack(args))
+                end
+            end)
+            print("Buy HP +10 → ON")
+        else
+            if buyHPLoop then task.cancel(buyHPLoop) buyHPLoop = nil end
+            print("Buy HP +10 → OFF")
+        end
+    end
+})
+
+local autoRebirthLoop
+Window:AddToggle({
+    text = "Auto Rebirth",
+    state = false,
+    flag = "auto_rebirth",
+    callback = function(v)
+        if v then
+            autoRebirthLoop = task.spawn(function()
+                local remote = game:GetService("ReplicatedStorage")
+                    :WaitForChild("Packages", 8)
+                    :WaitForChild("Net", 8)
+                    :WaitForChild("RE/RequestRebirth", 8)
+                
+                if not remote then warn("[Rebirth] Remote not found") return end
+                
+                while task.wait(1.5) do   -- slightly longer delay for rebirth (safer)
+                    pcall(remote.FireServer, remote)
+                end
+            end)
+            print("Auto Rebirth → ON")
+        else
+            if autoRebirthLoop then task.cancel(autoRebirthLoop) autoRebirthLoop = nil end
+            print("Auto Rebirth → OFF")
+        end
+    end
+})
+
+-- ────────────────────────────────────────────────
+-- Rarity auto-farm toggles (fully restored)
+
+local autoFarmToggles = {
+    Admin    = false,
+    OG       = false,
+    Secret   = false,
+    Mythical = false
+}
+
+Window:AddToggle({
+    text = "Auto Admin",
+    state = false,
+    flag = "auto_admin",
+    callback = function(v)
+        autoFarmToggles.Admin = v
+        print("Auto Admin:", v and "ON" or "OFF")
+    end
+})
+
+Window:AddToggle({
+    text = "Auto OG",
+    state = false,
+    flag = "auto_og",
+    callback = function(v)
+        autoFarmToggles.OG = v
+        print("Auto OG:", v and "ON" or "OFF")
+    end
+})
+
+Window:AddToggle({
+    text = "Auto Secret",
+    state = false,
+    flag = "auto_secret",
+    callback = function(v)
+        autoFarmToggles.Secret = v
+        print("Auto Secret:", v and "ON" or "OFF")
+    end
+})
+
+Window:AddToggle({
+    text = "Auto Mythical",
+    state = false,
+    flag = "auto_mythical",
+    callback = function(v)
+        autoFarmToggles.Mythical = v
+        print("Auto Mythical:", v and "ON" or "OFF")
+    end
+})
+
+-- Credit
+Window:AddLabel({text = "Made by Zapp IsMe"})
+
+-- Initialize GUI
+library:Init()
+
+print("Zaporium GUI fully loaded – Upgrades + Rarity Auto Farm")
+
+-- ────────────────────────────────────────────────
+-- Auto-farm logic (same as working version)
+
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+local SAFEZONE_CFRAME = CFrame.new(28.36, 133.75, -4.35)
+local PRIORITY = {"Admin", "OG", "Secret", "Mythical"}
+
+local mobsFolder = workspace:WaitForChild("Mobs", 10)
+if not mobsFolder then warn("Mobs folder missing") return end
+
+local function anyFarmActive()
+    for _, v in pairs(autoFarmToggles) do if v then return true end end
+    return false
+end
+
+local function getRarity(mob)
+    local root    = mob:FindFirstChild("RootPart")     if not root    then return nil end
+    local attach  = root:FindFirstChild("OverheadAttach") if not attach  then return nil end
+    local overhead = attach:FindFirstChild("AnimalOverhead") if not overhead then return nil end
+    local rarityObj = overhead:FindFirstChild("Rarity") if not rarityObj then return nil end
+
+    local txt = rarityObj.Text or rarityObj.Value or ""
+    return (txt:match("^%s*(.-)%s*$") or txt):lower()
+end
+
+local function farmOnCharacter(char)
+    local hrp = char:WaitForChild("HumanoidRootPart", 10)
+    if not hrp then warn("No HRP") return end
+
+    task.wait(0.8)  -- settle after spawn
+    print("Character ready – auto farm running")
+
+    while true do
+        if not anyFarmActive() then task.wait(1.2) continue end
+
+        local bestMob, bestPriority = nil, #PRIORITY + 1
+
+        for _, mob in ipairs(mobsFolder:GetChildren()) do
+            local r = getRarity(mob)
+            if not r then continue end
+
+            for i, target in ipairs(PRIORITY) do
+                if r == target:lower() and autoFarmToggles[target] and i < bestPriority then
+                    bestPriority = i
+                    bestMob = mob
+                    break
+                end
+            end
+        end
+
+        if not bestMob then task.wait(1.2) continue end
+
+        print("Farm → " .. bestMob.Name)
+
+        local root = bestMob:FindFirstChild("RootPart")
+        if not root then task.wait(0.4) continue end
+
+        char:PivotTo(root.CFrame * CFrame.new(0, 3.2, -2.8) * CFrame.Angles(0, math.rad(180), 0))
+        task.wait(0.5)
+
+        local prompt = root:FindFirstChildWhichIsA("ProximityPrompt", true)
+
+        local success = false
+
+        if prompt and prompt.Enabled then
+            if prompt.MaxActivationDistance < 6 or prompt.RequiresLineOfSight then
+                char:PivotTo(root.CFrame * CFrame.new(0, 2.4, -1.6) * CFrame.Angles(0, math.rad(180), 0))
+                task.wait(0.25)
+            end
+
+            prompt:InputHoldBegin()
+            local hold = prompt.HoldDuration > 0 and prompt.HoldDuration + 0.25 or 0.18
+            task.wait(hold)
+            prompt:InputHoldEnd()
+
+            task.wait(0.8)
+
+            if not bestMob.Parent then success = true end
+        end
+
+        task.wait(0.15)
+        char:PivotTo(SAFEZONE_CFRAME)
+        print("Safe")
+
+        task.wait(0.6 + (success and 0.5 or 0))
+    end
+end
+
+-- Start / respawn handling
+if player.Character then farmOnCharacter(player.Character) end
+player.CharacterAdded:Connect(farmOnCharacter)
