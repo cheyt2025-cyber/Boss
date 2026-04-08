@@ -1,0 +1,225 @@
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Create main window
+local Window = library:CreateWindow("Skateboard for Brainrots")
+
+-- ==================== SERVICES ====================
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local rootPart = character:WaitForChild("HumanoidRootPart")
+
+local brainrotsFolder = workspace:WaitForChild("Required"):WaitForChild("Brainrots")
+
+-- ==================== AUTO FARM DATA ====================
+local highTierData = {
+	-- Secret
+	["Noo My Hotspot"] = "Secret",
+	["Dragon Cannelloni"] = "Secret",
+	["1x1x1"] = "Secret",
+	["Swag Soda"] = "Secret",
+
+	-- Celestial
+	["Strawberry Elephant"] = "Celestial",
+	["Rainbow 67"] = "Celestial",
+	["Meowl"] = "Celestial",
+	["Nuclearo Dinossauro"] = "Celestial",
+
+	-- Divine
+	["Hydra Cannelloni"] = "Divine",
+	["Esok Sekolah"] = "Divine",
+	["Chillin Chili"] = "Divine",
+}
+
+local SAFE_ZONE_CFRAME = CFrame.new(-792.91, 14.50, -356.53)
+
+local running = false
+local currentConnection = nil
+
+-- ==================== NEW BOOST VARIABLES ====================
+local buyBoostEnabled = false
+local buySpeedEnabled = false
+local boostCoroutine = nil
+local speedCoroutine = nil
+
+-- ==================== AUTO FARM FUNCTIONS ====================
+local function triggerBrainrot(brainrotModel)
+	if not brainrotModel or not brainrotModel:FindFirstChild("HumanoidRootPart") then return end
+
+	local hitbox = brainrotModel:FindFirstChild("Hitbox")
+	local prompt = hitbox and hitbox:FindFirstChild("BrainrotPrompt")
+
+	rootPart.CFrame = brainrotModel.HumanoidRootPart.CFrame + Vector3.new(0, 5, 0)
+	wait(0.6)
+
+	if prompt and prompt:IsA("ProximityPrompt") then
+		fireproximityprompt(prompt)
+	end
+
+	wait(1.2)
+	rootPart.CFrame = SAFE_ZONE_CFRAME
+end
+
+local function startAutoFarm(selectedRarities)
+	if running then return end
+	running = true
+
+	print("Auto Farm Started for:", table.concat(selectedRarities, ", "))
+
+	currentConnection = brainrotsFolder.DescendantAdded:Connect(function(descendant)
+		if not running then return end
+		if descendant:IsA("UIStroke") and descendant.Name == "UIStroke" and 
+		   descendant.Parent and descendant.Parent.Name == "BrainrotName" then
+
+			local displayName = descendant.Parent.Text
+			if highTierData[displayName] and table.find(selectedRarities, highTierData[displayName]) then
+				local brainrotModel = descendant:FindFirstAncestorWhichIsA("Model")
+				if brainrotModel then
+					print("Auto-farming:", displayName, "(", highTierData[displayName], ")")
+					triggerBrainrot(brainrotModel)
+					wait(2)
+				end
+			end
+		end
+	end)
+
+	-- Initial scan
+	for _, descendant in ipairs(brainrotsFolder:GetDescendants()) do
+		if not running then break end
+		-- (same logic as above if you want initial scan)
+	end
+end
+
+local function stopAutoFarm()
+	running = false
+	if currentConnection then
+		currentConnection:Disconnect()
+		currentConnection = nil
+	end
+	print("Auto Farm Stopped")
+end
+
+-- ==================== BOOST FUNCTIONS ====================
+local function startBuyBoost()
+	if boostCoroutine then return end
+	boostCoroutine = coroutine.create(function()
+		local buyBoostRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("BuyBoost")
+		while buyBoostEnabled do
+			buyBoostRemote:InvokeServer()
+			task.wait(0.5)
+		end
+	end)
+	coroutine.resume(boostCoroutine)
+end
+
+local function stopBuyBoost()
+	buyBoostEnabled = false
+	boostCoroutine = nil
+end
+
+local function startBuySpeed()
+	if speedCoroutine then return end
+	speedCoroutine = coroutine.create(function()
+		local buySpeedRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("BuySpeed")
+		local args = {5}
+		while buySpeedEnabled do
+			buySpeedRemote:InvokeServer(unpack(args))
+			task.wait(0.5)
+		end
+	end)
+	coroutine.resume(speedCoroutine)
+end
+
+local function stopBuySpeed()
+	buySpeedEnabled = false
+	speedCoroutine = nil
+end
+
+-- ==================== GUI TOGGLES ====================
+
+-- NEW TOGGLES (placed above old ones)
+Window:AddToggle({
+	text = "Buy Boost",
+	state = false,
+	flag = "buy_boost",
+	callback = function(v)
+		buyBoostEnabled = v
+		if v then
+			startBuyBoost()
+		else
+			stopBuyBoost()
+		end
+	end
+})
+
+Window:AddToggle({
+	text = "Buy Speed +5",
+	state = false,
+	flag = "buy_speed_5",
+	callback = function(v)
+		buySpeedEnabled = v
+		if v then
+			startBuySpeed()
+		else
+			stopBuySpeed()
+		end
+	end
+})
+
+-- ==================== OLD AUTO FARM TOGGLES ====================
+local autoSecret = false
+local autoCelestial = false
+local autoDivine = false
+
+local function updateAutoFarm()
+	local activeRarities = {}
+	if autoSecret then table.insert(activeRarities, "Secret") end
+	if autoCelestial then table.insert(activeRarities, "Celestial") end
+	if autoDivine then table.insert(activeRarities, "Divine") end
+
+	if #activeRarities > 0 then
+		startAutoFarm(activeRarities)
+	else
+		stopAutoFarm()
+	end
+end
+
+Window:AddToggle({
+	text = "Auto Secret",
+	state = false,
+	flag = "aut_secret",
+	callback = function(v)
+		autoSecret = v
+		updateAutoFarm()
+	end
+})
+
+Window:AddToggle({
+	text = "Auto Celestial",
+	state = false,
+	flag = "aut_celestial",
+	callback = function(v)
+		autoCelestial = v
+		updateAutoFarm()
+	end
+})
+
+Window:AddToggle({
+	text = "Auto Divine",
+	state = false,
+	flag = "aut_divine",
+	callback = function(v)
+		autoDivine = v
+		updateAutoFarm()
+	end
+})
+
+-- Credit
+Window:AddLabel({text = "Made by ZapIsMe"})
+
+-- Initialize GUI
+library:Init()
+
+print("Zaporium Auto Brainrot GUI Loaded with Boosts!")
