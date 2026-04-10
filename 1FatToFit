@@ -1,0 +1,132 @@
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+-- Create main window
+local Window = library:CreateWindow("+1 Fat To Fit")
+
+local player = game.Players.LocalPlayer
+local RunService = game:GetService("RunService")
+
+-- ==================== AUTO WIN ====================
+local autoWinConnection = nil
+local lastTeleport = 0
+local teleportCFrame = CFrame.new(154.12, 92.71, -3046.45)
+
+local function startAutoWin()
+    if autoWinConnection then return end
+    lastTeleport = tick()
+    
+    autoWinConnection = RunService.Heartbeat:Connect(function()
+        if tick() - lastTeleport >= 1.5 then
+            if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                player.Character.HumanoidRootPart.CFrame = teleportCFrame
+                lastTeleport = tick()
+            end
+        end
+    end)
+end
+
+local function stopAutoWin()
+    if autoWinConnection then
+        autoWinConnection:Disconnect()
+        autoWinConnection = nil
+    end
+end
+
+-- ==================== AUTO REBIRTH ====================
+local autoRebirthConnection = nil
+
+local function startAutoRebirth()
+    if autoRebirthConnection then return end
+    
+    autoRebirthConnection = RunService.Heartbeat:Connect(function()
+        pcall(function()
+            game:GetService("ReplicatedStorage")
+                :WaitForChild("Packages", 5)
+                :WaitForChild("Net", 5)
+                :WaitForChild("RE/Rebirth", 5)
+                :FireServer()
+        end)
+    end)
+end
+
+local function stopAutoRebirth()
+    if autoRebirthConnection then
+        autoRebirthConnection:Disconnect()
+        autoRebirthConnection = nil
+    end
+end
+
+-- ==================== PERSISTENT WALKSPEED ====================
+local walkspeedValue = 16
+local walkspeedConnection = nil
+
+local function applyWalkSpeed()
+    if player.Character and player.Character:FindFirstChild("Humanoid") then
+        player.Character.Humanoid.WalkSpeed = walkspeedValue
+    end
+end
+
+local function startWalkSpeed()
+    if walkspeedConnection then return end
+    
+    -- Apply immediately
+    applyWalkSpeed()
+    
+    -- Keep applying every frame (this beats most resets)
+    walkspeedConnection = RunService.Heartbeat:Connect(applyWalkSpeed)
+end
+
+local function stopWalkSpeed()
+    if walkspeedConnection then
+        walkspeedConnection:Disconnect()
+        walkspeedConnection = nil
+    end
+    -- Reset to normal when turned off
+    if player.Character and player.Character:FindFirstChild("Humanoid") then
+        player.Character.Humanoid.WalkSpeed = 16
+    end
+end
+
+-- ==================== GUI ====================
+
+Window:AddToggle({
+    text = "Auto Win",
+    state = false,
+    flag = "autowin",
+    callback = function(state)
+        if state then startAutoWin() else stopAutoWin() end
+    end
+})
+
+Window:AddToggle({
+    text = "Auto Rebirth",
+    state = false,
+    flag = "autorebirth",
+    callback = function(state)
+        if state then startAutoRebirth() else stopAutoRebirth() end
+    end
+})
+
+Window:AddSlider({
+    text = "Walkspeed",
+    min = 16,
+    max = 200,
+    value = 16,
+    flag = "walkspeed",
+    callback = function(value)
+        walkspeedValue = value
+        if value > 16 then
+            startWalkSpeed()
+        else
+            stopWalkSpeed()
+        end
+    end
+})
+
+-- Credit (DO NOT REMOVE)
+Window:AddLabel({text = "Made by ZapIsMe"})
+
+-- Initialize GUI
+library:Init()
+
+print("Zaporium GUI Loaded - Persistent Walkspeed Added")
