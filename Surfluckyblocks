@@ -1,0 +1,291 @@
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Zap-Zaporium/Zap-is-Me/refs/heads/main/Zaporium.lua"))()
+
+local Window = library:CreateWindow("Surf for LuckyBlocks")
+
+-- ==================== COLLECT CASH ====================
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+
+local localPlayer = Players.LocalPlayer
+local plotsFolder = Workspace:WaitForChild("Plots")
+
+local collectThread = nil
+
+local function findMyBasePos()
+    for _, basePos in ipairs(plotsFolder:GetChildren()) do
+        local ownerSign = basePos:FindFirstChild("OwnerSign")
+        if ownerSign then
+            local main = ownerSign:FindFirstChild("Main")
+            if main then
+                local surfaceGui = main:FindFirstChild("SurfaceGui")
+                if surfaceGui then
+                    local textLabel = surfaceGui:FindFirstChild("TextLabel")
+                    if textLabel and textLabel.Text == localPlayer.Name then
+                        return basePos
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function autoCollectMyPads()
+    local myPlot = findMyBasePos()
+    if not myPlot then return end
+
+    local collectPadsFolder = myPlot:FindFirstChild("CollectPads")
+    if not collectPadsFolder then return end
+
+    local character = localPlayer.Character
+    if not character then return end
+    local rootPart = character:FindFirstChild("HumanoidRootPart") or character:FindFirstChildWhichIsA("BasePart")
+    if not rootPart then return end
+
+    for _, pad in ipairs(collectPadsFolder:GetChildren()) do
+        local topPart = pad:FindFirstChild("Top")
+        if topPart then
+            local touchInterest = topPart:FindFirstChild("TouchInterest") or topPart:FindFirstChildWhichIsA("TouchInterest")
+            if touchInterest then
+                firetouchinterest(rootPart, topPart, 0)
+                task.wait(0.05)
+                firetouchinterest(rootPart, topPart, 1)
+            end
+        end
+    end
+end
+
+Window:AddToggle({
+    text = "Collect Cash",
+    state = false,
+    flag = "collectcash",
+    callback = function(v)
+        if v then
+            if collectThread then task.cancel(collectThread) end
+            collectThread = task.spawn(function()
+                while true do
+                    autoCollectMyPads()
+                    task.wait(2)
+                end
+            end)
+        else
+            if collectThread then
+                task.cancel(collectThread)
+                collectThread = nil
+            end
+        end
+    end
+})
+
+-- ==================== BUY BOOST + SPEED ====================
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local networkFolder = ReplicatedStorage:WaitForChild("SharedModules"):WaitForChild("Network")
+local remotesFolder = networkFolder:WaitForChild("Remotes")
+local upgradeBoost = remotesFolder:WaitForChild("Upgrade Boost")
+local upgradeSpeed5 = remotesFolder:WaitForChild("Upgrade Speed 5")
+
+local boostThread = nil
+
+Window:AddToggle({
+    text = "Buy Boost + Speed",
+    state = false,
+    flag = "buyboostspeed",
+    callback = function(v)
+        if v then
+            if boostThread then task.cancel(boostThread) end
+            boostThread = task.spawn(function()
+                while true do
+                    upgradeBoost:FireServer()
+                    task.wait(0.05)
+                    upgradeSpeed5:FireServer()
+                    task.wait(0.05)
+                end
+            end)
+        else
+            if boostThread then
+                task.cancel(boostThread)
+                boostThread = nil
+            end
+        end
+    end
+})
+
+-- ==================== AUTO STEAL (FIXED) ====================
+local friendsFolder = workspace:WaitForChild("Live"):WaitForChild("Friends")
+local player = game.Players.LocalPlayer
+local safeZone = CFrame.new(-106.19, 4.86, 252.90)
+
+local enabledRarities = {}
+local processing = false
+local floatConnection = nil
+local childAddedConn = nil
+local stealThread = nil  -- For initial scan control
+
+local function startFloating(rootPart)
+    if floatConnection then floatConnection:Disconnect() end
+    floatConnection = game:GetService("RunService").Heartbeat:Connect(function()
+        local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if hrp and rootPart and rootPart.Parent then
+            local targetPos = rootPart.Position + Vector3.new(0, 15, 0)
+            hrp.CFrame = CFrame.new(targetPos) * CFrame.Angles(0, hrp.CFrame.Rotation.Y, 0)
+        end
+    end)
+end
+
+local function stopFloating()
+    if floatConnection then
+        floatConnection:Disconnect()
+        floatConnection = nil
+    end
+end
+
+local function stealRare(friend)
+    if processing then return end
+    processing = true
+
+    local rarityLabel = friend:FindFirstChild("FriendBillboard", true)
+                     and friend.FriendBillboard:FindFirstChild("Frame", true)
+                     and friend.FriendBillboard.Frame:FindFirstChild("Rarity")
+
+    if not rarityLabel or not enabledRarities[rarityLabel.Text] then
+        processing = false
+        return
+    end
+
+    local rarity = rarityLabel.Text
+    print(rarity)
+
+    local root = friend:FindFirstChild("RootPart") or friend:FindFirstChild("HumanoidRootPart")
+    local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+
+    if root and hrp then
+        startFloating(root)
+        task.wait(0.8)
+
+        local prompt = friend:FindFirstChild("StealPrompt", true)
+        if prompt and prompt:IsA("ProximityPrompt") then
+            fireproximityprompt(prompt)
+        end
+
+        task.wait(1.5)
+    end
+
+    stopFloating()
+
+    if hrp then
+        hrp.CFrame = safeZone
+    end
+
+    processing = false
+end
+
+local function startMonitoring()
+    -- Stop any previous monitoring
+    if childAddedConn then childAddedConn:Disconnect() end
+    if stealThread then task.cancel(stealThread) end
+
+    -- New ChildAdded
+    childAddedConn = friendsFolder.ChildAdded:Connect(function(friend)
+        task.wait(0.4)
+        stealRare(friend)
+    end)
+
+    -- Initial scan in controlled thread
+    stealThread = task.spawn(function()
+        for _, friend in ipairs(friendsFolder:GetChildren()) do
+            if not next(enabledRarities) then break end  -- safety
+            task.wait(0.4)
+            stealRare(friend)
+        end
+    end)
+end
+
+local function stopMonitoring()
+    if childAddedConn then
+        childAddedConn:Disconnect()
+        childAddedConn = nil
+    end
+    if stealThread then
+        task.cancel(stealThread)
+        stealThread = nil
+    end
+    stopFloating()
+    processing = false
+end
+
+-- Auto steal toggles
+Window:AddToggle({
+    text = "Auto Secret",
+    state = false,
+    flag = "aut_secret",
+    callback = function(v)
+        enabledRarities["Secret"] = v
+        if next(enabledRarities) then
+            startMonitoring()
+        else
+            stopMonitoring()
+        end
+    end
+})
+
+Window:AddToggle({
+    text = "Auto God",
+    state = false,
+    flag = "aut_god",
+    callback = function(v)
+        enabledRarities["Brainrot God"] = v
+        if next(enabledRarities) then
+            startMonitoring()
+        else
+            stopMonitoring()
+        end
+    end
+})
+
+Window:AddToggle({
+    text = "Auto Exclusive",
+    state = false,
+    flag = "aut_exclusive",
+    callback = function(v)
+        enabledRarities["Exclusive"] = v
+        if next(enabledRarities) then
+            startMonitoring()
+        else
+            stopMonitoring()
+        end
+    end
+})
+
+Window:AddToggle({
+    text = "Auto OG",
+    state = false,
+    flag = "aut_og",
+    callback = function(v)
+        enabledRarities["OG"] = v
+        if next(enabledRarities) then
+            startMonitoring()
+        else
+            stopMonitoring()
+        end
+    end
+})
+
+Window:AddToggle({
+    text = "Auto Divine",
+    state = false,
+    flag = "aut_divine",
+    callback = function(v)
+        enabledRarities["Divine"] = v
+        if next(enabledRarities) then
+            startMonitoring()
+        else
+            stopMonitoring()
+        end
+    end
+})
+
+-- Credit (DO NOT REMOVE)
+Window:AddLabel({text = "Made by ZapIsMe"})
+
+library:Init()
+print("Zaporium GUI Loaded - Auto Steal now stops properly!")
